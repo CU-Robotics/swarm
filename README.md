@@ -1,2 +1,2 @@
 # swarm
-Machine learning tooling and scripts for Hive
+Machine learning tooling and scripts for Hive.
