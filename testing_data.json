@@ -1,0 +1,59 @@
+{
+    "testing_data": [
+        {
+            "file_name": "blue1_image0_0.png",
+            "is_green": true,
+            "label": ""
+        },
+        {
+            "file_name": "blue1_image10_2.png",
+            "is_green": false,
+            "label": ""
+        },
+        {
+            "file_name": "blue1_image15_3.png",
+            "is_green": false,
+            "label": ""
+        },
+        {
+            "file_name": "blue1_image20_4.png",
+            "is_green": false,
+            "label": ""
+        },
+        {
+            "file_name": "blue1_image25_5.png",
+            "is_green": false,
+            "label": ""
+        },
+        {
+            "file_name": "blue1_image30_6.png",
+            "is_green": false,
+            "label": ""
+        },
+        {
+            "file_name": "blue1_image35_7.png",
+            "is_green": false,
+            "label": ""
+        },
+        {
+            "file_name": "blue1_image40_8.png",
+            "is_green": false,
+            "label": ""
+        },
+        {
+            "file_name": "blue1_image45_9.png",
+            "is_green": false,
+            "label": ""
+        },
+        {
+            "file_name": "blue1_image50_10.png",
+            "is_green": false,
+            "label": ""
+        },
+        {
+            "file_name": "blue1_image5_1.png",
+            "is_green": false,
+            "label": ""
+        }
+    ]
+}
