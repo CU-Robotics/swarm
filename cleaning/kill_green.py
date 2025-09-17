@@ -3,12 +3,7 @@ import os
 import json
 
 datadir = os.path.dirname(__file__) + "\\..\\testing_data"
-
 folder_name = datadir.split("\\")[-1]
-
-test_data = os.path.dirname(__file__) + "\\..\\..\\data\\blue1"
-datadir = test_data
-# if image contains
 
 bad_images_count = 0
 total_count = 0
@@ -33,8 +28,6 @@ for image in os.listdir(datadir):
         "is_green": count > 500,
         "label": ""
     }
-
-    
     
     if count > 500:
         bad_images_count += 1
@@ -52,3 +45,13 @@ with open("labels.json", "w", encoding="utf-8") as f:
     json.dump(labels, f, indent=4)
 
 # json, file_name, (green or not green), (label) 
+
+# big folder
+#   - blue 1
+#      - image1
+#   - blue 2
+#      - image1
+#   - red 1
+#      - image1
+#   - red 2
+#      - image1
