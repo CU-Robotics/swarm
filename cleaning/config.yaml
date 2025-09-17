@@ -1,0 +1,60 @@
+#Lower bound for looking for white in between blue strips (HSV)
+white_lower:
+  - 0
+  - 0
+  - 50
+
+#Upper bound for looking for white in between blue strips (HSV)
+white_upper:
+  - 255
+  - 110
+  - 255
+
+#Lower bound for finding blue strips (HSV)
+blue_lower:
+  - 85
+  - 20
+  - 235
+
+#Upper bound for finding blue strips (HSV)
+blue_upper:
+  - 120
+  - 255
+  - 255
+
+#Lower bound for finding red strips (HSV)
+red_lower:
+  - -20
+  - 0
+  - 200
+
+#Upper bound for finding red strips (HSV)
+red_upper:
+  - 20
+  - 255
+  - 255
+
+#possible armor panel stickers
+possible_names:
+  - "sentry"
+  - "hero"
+  - "standard3"
+  - "standard4"
+
+possible_is_big:
+  - 0
+  - 1
+  - 0
+  - 0
+
+possible_scaling_factor:
+  - 1.63
+  - 1.43
+  - 1.1
+  - 1.57
+
+possible_img_paths:
+  - "res/symbol_sentry.png"
+  - "res/symbol_1.png"
+  - "res/symbol_3.png"
+  - "res/symbol_4.png"
