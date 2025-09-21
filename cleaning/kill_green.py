@@ -3,28 +3,33 @@ import os
 import json
 import sys
 
+# accepts folder name "raw", for each valid image, process it & edit metadata.
 def main():
     if len(sys.argv) == 2:
         print("Arguments passed:" + sys.argv[1])
     else:
-        print("Incorrect number of arguments passed. Please provide the folder path to be processed.")
+        print("Incorrect number of arguments passed. Please ONLY provide the folder path to be processed.")
         exit()
     
+    datadir = os.getcwd() + sys.argv[1]
+    parent_dir = os.path.dirname(datadir)
+    parent_folder_name = os.path.basename(parent_dir)
 
-    datadir = os.path.dirname(os.path.abspath(__file__)) + sys.argv[1]
     print("Reading from directory: " + datadir + "\n")
 
-    folder_name = datadir.split("\\")[-1]
+    with open(f"{parent_dir}/metadata.json", 'r') as f:
+        metadata = json.load(f)
+        f.close()
+      
+    
+    
 
     bad_images_count = 0
     total_count = 0
 
-    labels = {}
-    labels[folder_name] = []
-
     print("=====PROCESSING=====")
-    for image in os.listdir(datadir):
-        img = cv2.imread(os.path.join(datadir, image))
+    for entry in metadata[parent_folder_name]:
+        img = cv2.imread(os.path.join(datadir, entry["file_name"]))
 
         lower = (0, 154, 0) 
         upper = (0, 255, 0) 
@@ -35,33 +40,35 @@ def main():
         # count how many non-zero pixels are in the mask
         count = cv2.countNonZero(mask)
 
-        data = {
-            "file_name": image,
-            "is_green": count > 500,
-            "label": ""
-        }
+
         
         if count > 500:
             bad_images_count += 1
+            entry["is_valid"] = False
+            # add label is_green to be true/false
+        else:
+            entry["is_valid"] = True
         
-        print(f"{image}: {count} green pixels")
+        print(f"{entry["file_name"]}: {count} green pixels")
             
         
-        labels[folder_name].append(data)
         total_count += 1
     print("=====FINISHED=====\n")
 
     print(f"{bad_images_count} out of {total_count} images had green error pixels: {round(bad_images_count/total_count*100, 2)}% error rate")
-    print(f"Labels saved to {folder_name}.json\n")
+
+    with open(f"{parent_dir}/metadata.json", 'w') as f:
+        json.dump(metadata, f, indent=4)
+        f.close()
     
-    with open(f"{folder_name}.json", "w", encoding="utf-8") as f:
-        json.dump(labels, f, indent=4)
+
+
     
     
 
 if __name__ == "__main__":
     main()
-
+    # add return to new folder name
 
 # json, file_name, (green or not green), (label) 
 

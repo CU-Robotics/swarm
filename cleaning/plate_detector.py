@@ -2,10 +2,13 @@ import cv2
 import numpy as np
 import yaml
 import os
+import sys
 
+# Path to data to detect plates on
 parent_dir = os.path.dirname(os.path.abspath(__file__)) + "\\"
-config = yaml.load(open(parent_dir  + "config.yaml", 'r', encoding='utf-8'), Loader=yaml.FullLoader)
 
+# Config info for color mask bounds
+config = yaml.load(open(parent_dir  + "config.yaml", 'r', encoding='utf-8'), Loader=yaml.FullLoader)
 
 blue_lower = np.array(config['blue_lower'])
 blue_upper = np.array(config['blue_upper'])
@@ -13,24 +16,23 @@ blue_upper = np.array(config['blue_upper'])
 red_lower = np.array(config['red_lower'])
 red_upper = np.array(config['red_upper'])
 
+# Magic Numbers copied over from the C++ version, idk how these were found
 min_pixel_area = 5
-min_h_to_w_ratio = 1.0
+min_h_to_w_ratio = 1.0  
 min_light_overlap = 0.8
 min_light_size_ratio = 0.1
 min_width_to_height_ratio = .8 # 1
 max_width_to_height_ratio = 6
 min_inner_width_respect_to_light_width = 1000 #1.5
 
-#Min heght to search for symbol
-# int inner_symbol_search_height = 3
-#How big the symbol can be in relation to target
-min_symbol_to_target_height_ratio = 0.6
-# Max offset x symbol can be from center of target
-max_symbol_x_offset_from_center = 0.15
-# Max offset y symbol can be from center of target
-max_symbol_y_offset_from_center = 3 # 0.3
 
-
+# Arguments
+#   - image: the image to detect on
+#   - color: what team color are you looking for from plates (default blue team)
+#   - debug: unsure rn
+# Outputs
+#   - armor_plates: rectangles of said plates
+#   - image:        image with rectangles drawn
 def detect_armor_plates(image, color="blue", debug=True):
     # Convert to HSV
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
@@ -108,22 +110,31 @@ def detect_armor_plates(image, color="blue", debug=True):
 
 
 if __name__ == "__main__":
-    # img = cv2.imread(parent_dir + "..\\testing_data\\blue1_image5_1.png")
-    # cv2.imshow("Original", img)
-    # cv2.waitKey(0)
-
-    folder_path = parent_dir + "..\\..\\data\\blue1"
-    for image_name in os.listdir(folder_path):
-        img = cv2.imread(os.path.join(folder_path, image_name))
-
-        plates, debug_img = detect_armor_plates(img, color="blue", debug=True)
-        print("file:", image_name)
-        print("Detected armor plates:", plates)
-
-        # resize debug image for better visibility
-        debug_img = cv2.resize(debug_img, (0,0), fx=0.5, fy=0.5)
-        cv2.imshow("Detections", debug_img)
-        cv2.waitKey(0)
+    if len(sys.argv) == 2:
+        print("Arguments passed:" + sys.argv[1])
+    else:
+        print("Incorrect number of arguments passed. Please provide the folder path to be processed.")
+        exit()
     
-    cv2.destroyAllWindows()
+    datadir = os.getcwd() + sys.argv[1]
+    print("Reading from directory: " + datadir + "\n")
+    
+    folder_path = os.getcwd() + sys.argv[1]
+    print(folder_path)
+
+    # for image_name in os.listdir(folder_path):
+    #     img = cv2.imread(os.path.join(folder_path, image_name))
+
+    #     plates, debug_img = detect_armor_plates(img, color="blue", debug=True)
+    #     print("file:", image_name)
+    #     print("Detected armor plates:", plates)
+
+    #     # resize debug image for better visibility
+    #     debug_img = cv2.resize(debug_img, (0,0), fx=0.5, fy=0.5)
+    #     cv2.imshow("Detections", debug_img)
+    #     cv2.waitKey(0)
+    
+    # cv2.destroyAllWindows()
+
+    
     
