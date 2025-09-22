@@ -3,6 +3,7 @@ import numpy as np
 import yaml
 import os
 import sys
+import json
 
 # Path to data to detect plates on
 parent_dir = os.path.dirname(os.path.abspath(__file__)) + "\\"
@@ -113,28 +114,48 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         print("Arguments passed:" + sys.argv[1])
     else:
-        print("Incorrect number of arguments passed. Please provide the folder path to be processed.")
+        print("Incorrect number of arguments passed. Please ONLY provide the folder path to be processed.")
         exit()
     
     datadir = os.getcwd() + sys.argv[1]
+    parent_dir = os.path.dirname(datadir)
+    parent_folder_name = os.path.basename(parent_dir)
+
+    debug = False
+
     print("Reading from directory: " + datadir + "\n")
+
+    with open(f"{parent_dir}/metadata.json", 'r') as f:
+        metadata = json.load(f)
+        f.close()
     
-    folder_path = os.getcwd() + sys.argv[1]
-    print(folder_path)
+    for entry in metadata[parent_folder_name]:
+        image_name = entry["file_name"]
+        if entry["is_valid"] == False:
+            continue
 
-    # for image_name in os.listdir(folder_path):
-    #     img = cv2.imread(os.path.join(folder_path, image_name))
+        img = cv2.imread(os.path.join(datadir, image_name))
 
-    #     plates, debug_img = detect_armor_plates(img, color="blue", debug=True)
-    #     print("file:", image_name)
-    #     print("Detected armor plates:", plates)
+        plates, debug_img = detect_armor_plates(img, color="blue", debug = debug)
+        print("file:", image_name)
+        print("Detected armor plates:", plates)
 
-    #     # resize debug image for better visibility
-    #     debug_img = cv2.resize(debug_img, (0,0), fx=0.5, fy=0.5)
-    #     cv2.imshow("Detections", debug_img)
-    #     cv2.waitKey(0)
+        if debug:
+            # resize debug image for better visibility
+            debug_img = cv2.resize(debug_img, (0,0), fx=0.5, fy=0.5)
+            cv2.imshow("Detections", debug_img)
+            cv2.waitKey(0)
+        
+        entry["labels"]["plates"] = plates
     
-    # cv2.destroyAllWindows()
+    if debug:
+        cv2.destroyAllWindows()
+
+    with open(f"{parent_dir}/metadata.json", 'w') as f:
+        json.dump(metadata, f, indent=4)
+        f.close()
+    
+    
 
     
     

@@ -27,7 +27,7 @@ def main():
         {
             "file_name": image_path, 
             "is_valid": True, 
-            "label": {}
+            "labels": {}
         })
 
     print(json.dumps(metadata_template))
