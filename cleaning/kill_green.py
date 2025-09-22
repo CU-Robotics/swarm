@@ -40,14 +40,13 @@ def main():
         # count how many non-zero pixels are in the mask
         count = cv2.countNonZero(mask)
 
-
-        
+        # If there's a significant amount of pure green pixels, we can safley assume it was corrupted
+        # Set label to be false
         if count > 500:
             bad_images_count += 1
             entry["is_valid"] = False
-            # add label is_green to be true/false
-        else:
-            entry["is_valid"] = True
+            entry["labels"] = {"is_green": True}
+            
         
         print(f"{entry["file_name"]}: {count} green pixels")
             
