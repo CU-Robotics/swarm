@@ -45,7 +45,7 @@ def main():
         if count > 500:
             bad_images_count += 1
             entry["is_valid"] = False
-            entry["labels"] = {"is_green": True}
+            entry["labels"]["is_green"] =  True
             
         
         print(f"{entry["file_name"]}: {count} green pixels")
