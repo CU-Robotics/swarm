@@ -1,3 +1,9 @@
 testing_data/*
 *.json
 cleaning/sandbox.py
+__pycache__/
+
+# add examples but not testing outputs
+collections/*/examples/*
+!collections/*/examples/raw/
+!collections/*/examples/raw/**
