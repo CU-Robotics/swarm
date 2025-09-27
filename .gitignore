@@ -4,6 +4,8 @@ cleaning/sandbox.py
 __pycache__/
 
 # add examples but not testing outputs
+.latest-pipeline-new-files
 collections/*/examples/*
 !collections/*/examples/raw/
 !collections/*/examples/raw/**
+!collections/*/examples/pipeline-root.json

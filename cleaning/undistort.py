@@ -11,12 +11,12 @@ def main():
     ctx.make_output_dir("undistorted")
 
     # load camera calibration
-    calib = pathlib.Path("../collections/armor_plates_9-14-25/calibrations")
-    assert calib.exists()
+    calib_path = pathlib.Path("../collections/armor_plates_9-14-25/calibrations")
+    assert calib_path.exists()
 
-    calib = next(calib.iterdir())
-    logging.info(f"loading calibration: {str(calib)}")
-    calib = yaml.load(calib.read_text(), Loader=yaml.Loader)
+    calib_path = next(calib_path.iterdir())
+    logging.info(f"loading calibration: {str(calib_path)}")
+    calib = yaml.load(calib_path.read_text(), Loader=yaml.Loader)
 
     w, h = calib["Resolution"]
     K = np.array(calib["K"])
@@ -28,7 +28,7 @@ def main():
     for data, src, dst in ctx.rows():
         image = cv2.imread(src)
         fixed = cv2.remap(image, x_map, y_map, interpolation=cv2.INTER_LINEAR)
-        data["labels"]["undistorted"] = True
+        data["labels"]["undistort_calib_batch"] = calib_path.stem
         cv2.imwrite(dst, fixed)
 
     # update metadata

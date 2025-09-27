@@ -1,15 +1,18 @@
+#!/usr/bin/env python3
 import cv2
 import numpy as np
 import yaml
+import pathlib
 import os
-import sys
-import json
+import logging
+import pipeline
 
 # Path to data to detect plates on
-parent_dir = os.path.dirname(os.path.abspath(__file__)) + "\\"
+parent_dir = pathlib.Path(__file__).resolve().parent
+config_path = parent_dir / "config.yaml"
 
 # Config info for color mask bounds
-config = yaml.load(open(parent_dir  + "config.yaml", 'r', encoding='utf-8'), Loader=yaml.FullLoader)
+config = yaml.load(config_path.read_text(), Loader=yaml.FullLoader)
 
 blue_lower = np.array(config['blue_lower'])
 blue_upper = np.array(config['blue_upper'])
@@ -25,7 +28,6 @@ min_light_size_ratio = 0.1
 min_width_to_height_ratio = .8 # 1
 max_width_to_height_ratio = 6
 min_inner_width_respect_to_light_width = 1000 #1.5
-
 
 # Arguments
 #   - image: the image to detect on
@@ -109,53 +111,30 @@ def detect_armor_plates(image, color="blue", debug=True):
 
     return armor_plates, image
 
-
-if __name__ == "__main__":
-    if len(sys.argv) == 2:
-        print("Arguments passed:" + sys.argv[1])
-    else:
-        print("Incorrect number of arguments passed. Please ONLY provide the folder path to be processed.")
-        exit()
-    
-    datadir = os.getcwd() + sys.argv[1]
-    parent_dir = os.path.dirname(datadir)
-    parent_folder_name = os.path.basename(parent_dir)
+def main():
+    ctx = pipeline.get_stage_context()
 
     debug = False
-
-    print("Reading from directory: " + datadir + "\n")
-
-    with open(f"{parent_dir}/metadata.json", 'r') as f:
-        metadata = json.load(f)
-        f.close()
-    
-    for entry in metadata[parent_folder_name]:
-        image_name = entry["file_name"]
-        if entry["is_valid"] == False:
-            continue
-
-        img = cv2.imread(os.path.join(datadir, image_name))
-
-        plates, debug_img = detect_armor_plates(img, color="blue", debug = debug)
-        print("file:", image_name)
-        print("Detected armor plates:", plates)
-
+    for data, src, _ in ctx.rows():
+        image = cv2.imread(src)
+        
+        plates, debug_img = detect_armor_plates(image, color="blue", debug = debug)
+        
         if debug:
             # resize debug image for better visibility
             debug_img = cv2.resize(debug_img, (0,0), fx=0.5, fy=0.5)
             cv2.imshow("Detections", debug_img)
             cv2.waitKey(0)
         
-        entry["labels"]["plates"] = plates
+        data["labels"]["plates"] = plates
+        if len(plates) == 0:
+            data["valid"] = False
     
     if debug:
         cv2.destroyAllWindows()
 
-    with open(f"{parent_dir}/metadata.json", 'w') as f:
-        json.dump(metadata, f, indent=4)
-        f.close()
-    
-    
+    # update metadata
+    ctx.update()
 
-    
-    
+if __name__ == "__main__":
+    main()

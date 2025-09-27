@@ -68,13 +68,24 @@ class StageContext:
         with self.meta_path.open("w", encoding="utf-8") as f:
             json.dump(self.meta, f, indent=2)
 
-    def rows(self) -> Iterator[Tuple]:
+    def rows(self, discard_invalid: bool = True) -> Iterator[Tuple]:
         for row in self.meta[self.working_dir.parent.stem]:
+            if discard_invalid and not row["valid"]:
+                continue
+
             yield (
                 row,
                 self.working_dir / row["name"], 
                 self.output_dir / row["name"] if self.output_dir is not None else None,
             )
+
+    def row_count(self, discard_invalid: bool = True) -> int:
+        count = 0
+        for row in self.meta[self.working_dir.parent.stem]:
+            if discard_invalid and not row["valid"]:
+                continue
+            count += 1
+        return count
 
     def make_output_dir(self, name: str = f"stage{get_stage_num()}") -> None:
         """
@@ -123,6 +134,16 @@ def generate_metadata_obj(path: pathlib.Path) -> dict:
     """
     generate JSON metadata for working folder
     """
+    # load root labels (e.g. if data partitioned across features already)
+    root_path = path / "pipeline-root.json"
+    base_labels = {}
+    if root_path.exists():
+        pipeline_root = root_path.read_text()
+        pipeline_root = json.loads(pipeline_root)
+
+        for feature, value in pipeline_root.get("base_labels", {}).items():
+            base_labels[feature] = value
+
     raw_path = path / "raw"
     assert raw_path.exists() and raw_path.is_dir()
 
@@ -132,10 +153,15 @@ def generate_metadata_obj(path: pathlib.Path) -> dict:
             meta[path.name].append({
                 "name": f.name,
                 "valid": True,
-                "labels": {},
+                "labels": base_labels,
             })
     
     return meta
+
+def write_new_files(new_files: list[str]) -> None:
+    pathlib.Path("./.latest-pipeline-new-files").write_text(
+        " ".join(new_files)
+    )
 
 def get_metadata(args: argparse.Namespace) -> pathlib.Path:
     """
@@ -194,8 +220,13 @@ def main():
         level=getattr(logging, args.log_level, logging.ERROR),
     )
 
+    # store state info
+    new_files = []
+
     # get metadata file
     meta_path = get_metadata(args)
+    new_files.append(str(meta_path.resolve()))
+    write_new_files(new_files)
 
     # run stages
     os.environ[INSTANCE_ID_KEY] = str(uuid.uuid4())
@@ -224,6 +255,9 @@ def main():
         if output.get("mutated", False):
             working_dir = working_dir.with_name(output.get("name", stage.stem))
             logging.info(f"new working directory: {str(working_dir)}")
+
+            new_files.append(working_dir.name)
+            write_new_files(new_files)
 
         # track stages
         stage_index += 1
