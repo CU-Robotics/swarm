@@ -10,6 +10,8 @@ import subprocess
 import uuid
 import inspect
 import sys
+import tarfile
+from tqdm import tqdm
 from typing import Optional, Iterator, Tuple
 from functools import wraps
 from dataclasses import dataclass
@@ -145,7 +147,40 @@ def generate_metadata_obj(path: pathlib.Path) -> dict:
             base_labels[feature] = value
 
     raw_path = path / "raw"
-    assert raw_path.exists() and raw_path.is_dir()
+
+    # data is probably compressed, try to extract it for future use
+    if not raw_path.exists() or (raw_path.is_dir() and not any(raw_path.iterdir())):
+        raw_path.mkdir(exist_ok=True)
+
+        # look for gzip archive and create raw/
+        archive_path = path / "raw.tar.gz"
+        assert archive_path.exists()
+
+        with tarfile.open(archive_path, "r") as tar:
+            total_size = sum(mem.size for mem in tar.getmembers())
+
+            with tqdm(total=total_size, unit="B", unit_scale=True, desc=f"Extracing {archive_path.name}") as bar:
+                for mem in tar.getmembers():
+                    if not mem.isfile():
+                        continue        
+                
+                    out_path = pathlib.Path(mem.name)
+                    if not out_path.suffix.lower() in DATA_SUFFIXES:
+                        continue
+                        
+                    # "flatten" the path and skip duplicates
+                    out_path = raw_path / out_path.name
+                    if out_path.exists():
+                        continue
+
+                    # block traversals
+                    if not out_path.resolve().is_relative_to(raw_path.resolve()):
+                        continue
+
+                    # write all files to raw/
+                    with tar.extractfile(mem) as src, open(out_path, "wb") as dst:
+                        dst.write(src.read())
+                    bar.update(mem.size)
 
     meta = dict([(path.name, [])])
     for f in raw_path.iterdir():

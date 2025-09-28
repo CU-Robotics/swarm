@@ -6,6 +6,7 @@ import pathlib
 import os
 import logging
 import pipeline
+from tqdm import tqdm
 
 # Path to data to detect plates on
 parent_dir = pathlib.Path(__file__).resolve().parent
@@ -115,20 +116,22 @@ def main():
     ctx = pipeline.get_stage_context()
 
     debug = False
-    for data, src, _ in ctx.rows():
-        image = cv2.imread(src)
-        
-        plates, debug_img = detect_armor_plates(image, color="blue", debug = debug)
-        
-        if debug:
-            # resize debug image for better visibility
-            debug_img = cv2.resize(debug_img, (0,0), fx=0.5, fy=0.5)
-            cv2.imshow("Detections", debug_img)
-            cv2.waitKey(0)
-        
-        data["labels"]["plates"] = plates
-        if len(plates) == 0:
-            data["valid"] = False
+    with tqdm(total=ctx.row_count(), unit="img", desc=f"Auto-detecting armor plates") as bar:
+        for data, src, _ in ctx.rows():
+            image = cv2.imread(src)
+            
+            plates, debug_img = detect_armor_plates(image, color="blue", debug = debug)
+            
+            if debug:
+                # resize debug image for better visibility
+                debug_img = cv2.resize(debug_img, (0,0), fx=0.5, fy=0.5)
+                cv2.imshow("Detections", debug_img)
+                cv2.waitKey(0)
+            
+            data["labels"]["plates"] = plates
+            if len(plates) == 0:
+                data["valid"] = False
+            bar.update(1)
     
     if debug:
         cv2.destroyAllWindows()
