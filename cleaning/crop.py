@@ -15,7 +15,6 @@ def main():
     # iterate over data rows
     for data, src, dst in ctx.rows():
         image = cv2.imread(src)
-        height, width, _ = image.shape
 
         for plate in data["labels"].get("plates", []):
             # get bounding box

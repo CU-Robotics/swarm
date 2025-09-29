@@ -1,6 +1,6 @@
 testing_data/*
 *.json
-cleaning/sandbox.py
+*/*sandbox.py
 __pycache__/
 
 # add examples but not testing outputs
