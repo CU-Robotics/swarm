@@ -2,6 +2,7 @@ import sys
 import os
 import cv2
 import numpy as np
+from enum import IntEnum
 from typing import Tuple
 from contextlib import contextmanager
 
@@ -71,3 +72,9 @@ class TextBox():
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
+
+class KeyCode(IntEnum):
+    ESCAPE = 27
+    BACKSPACE = 8
+    LEFT_ARROW = 81
+    RIGHT_ARROW = 83

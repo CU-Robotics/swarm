@@ -23,8 +23,9 @@ UTIL
 
 LOG_FORMAT = "[%(levelname)s] %(filename)s: %(message)s"
 
-# track stage index
+# track stage index, root
 stage_index = 0
+root_working_dir = "raw"
 
 def get_stage_num() -> int:
     global stage_index
@@ -70,21 +71,23 @@ class StageContext:
         with self.meta_path.open("w", encoding="utf-8") as f:
             json.dump(self.meta, f, indent=2)
 
-    def rows(self, discard_invalid: bool = True) -> Iterator[Tuple]:
+    def rows(self, filter_by: set[bool] = {True}) -> Iterator[Tuple]:
         for row in self.meta[self.working_dir.parent.stem]:
-            if discard_invalid and not row["valid"]:
+            if row["valid"] not in filter_by:
                 continue
 
-            yield (
-                row,
-                self.working_dir / row["name"], 
-                self.output_dir / row["name"] if self.output_dir is not None else None,
-            )
+            src_path = self.working_dir / row["name"]
+            if src_path.exists():
+                yield (
+                    row,
+                    src_path, 
+                    self.output_dir / row["name"] if self.output_dir is not None else None,
+                )
 
-    def row_count(self, discard_invalid: bool = True) -> int:
+    def row_count(self, filter_by: set[bool] = {True}) -> int:
         count = 0
         for row in self.meta[self.working_dir.parent.stem]:
-            if discard_invalid and not row["valid"]:
+            if row["valid"] not in filter_by:
                 continue
             count += 1
         return count
@@ -205,7 +208,7 @@ def get_metadata(args: argparse.Namespace) -> pathlib.Path:
     """
     base_path = pathlib.Path(args.working_dir)
     path = base_path / generate_batch_name(args.batch_id)
-        
+    
     if args.meta:
         # create the batch if specified by CLIF
         logging.info("specified meta option, generating new metadata file...")
@@ -235,7 +238,7 @@ def interpret_stage_output(stdout: str) -> dict:
     return {}
 
 def main():
-    global stage_index
+    global stage_index, root_working_dir
 
     # CLI
     parser = argparse.ArgumentParser(
@@ -247,6 +250,7 @@ def main():
     parser.add_argument("-w", "--working-dir", required=False, type=str, default=".", help="specify working directory")
     parser.add_argument("-b", "--batch-id", required=False, type=str, default=BATCH_ID, help="specify pipeline batch ID")
     parser.add_argument("-l", "--log-level", required=False, type=str, default="ERROR", help="specify log level")
+    parser.add_argument("-r", "--root", required=False, type=str, default="raw", help="specify root working directory")
     parser.add_argument("stages", nargs="+", help="specify pipeline stages (list of space-separated scripts)")
     args = parser.parse_args()
 
@@ -265,8 +269,9 @@ def main():
 
     # run stages
     os.environ[INSTANCE_ID_KEY] = str(uuid.uuid4())
-    working_dir = meta_path.parent / "raw"
+    working_dir = meta_path.parent / args.root # usually raw/
     
+    print(f"running stages: {', '.join(args.stages)}")
     for stage in args.stages:
         # get working directory path
         assert working_dir.exists() and working_dir.is_dir()

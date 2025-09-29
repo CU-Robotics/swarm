@@ -4,16 +4,11 @@ import sys
 import numpy as np
 import logging
 import pipeline
-from util import TextBox, silence_stderr
+from util import TextBox, silence_stderr, KeyCode
 from tqdm import tqdm
 
 BASE_BORDER = 1
 SELECT_BORDER = BASE_BORDER + 1
-
-LEFT_ARROW = 81
-RIGHT_ARROW = 83
-ESCAPE = 27
-BACKSPACE = 8
 
 # review image bounding boxes and discard invalid ones
 def main():
@@ -78,10 +73,10 @@ def main():
 
                 # wait on keypress
                 key = cv2.waitKey(0) & 0xff
-                if key == LEFT_ARROW:
+                if key == KeyCode.LEFT_ARROW:
                     if not first_view:
                         plate_index = (plate_index - 1) % len(plates)
-                elif key == RIGHT_ARROW:
+                elif key == KeyCode.RIGHT_ARROW:
                     if not first_view:
                         plate_index = (plate_index + 1) % len(plates)
                 elif key == ord("t"):
@@ -94,10 +89,12 @@ def main():
                     bar.n = max(bar.n, image_index + 1)
                     bar.refresh()
                     break
-                elif key == BACKSPACE:
+                elif key == KeyCode.BACKSPACE:
                     image_index = (image_index - 1) % row_count
+                    bar.n = max(bar.n, image_index + 1)
+                    bar.refresh()
                     break
-                elif key == ESCAPE:
+                elif key == KeyCode.ESCAPE:
                     bar.n = ctx.row_count()
                     bar.refresh()
                     done = True
