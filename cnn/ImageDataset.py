@@ -1,9 +1,8 @@
 import os
 import json
-from torchvision.io import decode_image
 import torch
 from torch.utils.data import Dataset
-from  PIL import Image
+from PIL import Image
 
 classes = {'1':1, '2':2, '3':3, '4':4, 'sentry':5, 'base':6, 'tower':7}
 
