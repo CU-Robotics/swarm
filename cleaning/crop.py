@@ -14,7 +14,7 @@ def main():
     
     # iterate over data rows
     for data, src, dst in ctx.rows():
-        image = cv2.imread(src)
+        image = cv2.imread(str(src))
 
         for plate in data["labels"].get("plates", []):
             # get bounding box
@@ -27,7 +27,7 @@ def main():
             cropped = cv2.resize(cropped, (target_x_pixels, target_y_pixels))
 
             # save cropped image
-            cv2.imwrite(dst, cropped)
+            cv2.imwrite(str(dst), cropped)
         
         
     # update metadata

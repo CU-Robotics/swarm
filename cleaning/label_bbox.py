@@ -57,7 +57,7 @@ def main():
 
         while not done:
             data, src, _ = rows[image_index]
-            undist = cv2.imread(src)
+            undist = cv2.imread(str(src))
 
             first_view = True
             while True:

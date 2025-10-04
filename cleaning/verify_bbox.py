@@ -29,7 +29,7 @@ def main():
     with tqdm(total=ctx.row_count(), unit="img", desc=f"Correcting auto-detected plates") as bar:
         while not done:
             data, src, _ = rows[image_index]
-            undist = cv2.imread(src)
+            undist = cv2.imread(str(src))
 
             plates = data["labels"].get("plates", [])
             assert len(plates) > 0, "zero detections should not pass through filter"
@@ -73,10 +73,10 @@ def main():
 
                 # wait on keypress
                 key = cv2.waitKey(0) & 0xff
-                if key == KeyCode.LEFT_ARROW:
+                if key == KeyCode.LEFT_ARROW or key == ord('a'):
                     if not first_view:
                         plate_index = (plate_index - 1) % len(plates)
-                elif key == KeyCode.RIGHT_ARROW:
+                elif key == KeyCode.RIGHT_ARROW or key == ord('d'):
                     if not first_view:
                         plate_index = (plate_index + 1) % len(plates)
                 elif key == ord("t"):

@@ -1,9 +1,8 @@
 import os
 import json
-from torchvision.io import decode_image
 import torch
 from torch.utils.data import Dataset
-from  PIL import Image
+from PIL import Image
 
 #Note: CHANGE ALL INSTANCES OF "examples"
 

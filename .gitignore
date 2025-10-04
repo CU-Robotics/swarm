@@ -2,6 +2,7 @@ testing_data/*
 *.json
 */*sandbox.py
 __pycache__/
+myenv/*
 
 # add examples but not testing outputs
 .latest-pipeline-new-files

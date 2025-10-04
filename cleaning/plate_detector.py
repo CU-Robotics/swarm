@@ -118,7 +118,7 @@ def main():
     debug = False
     with tqdm(total=ctx.row_count(), unit="img", desc=f"Auto-detecting armor plates") as bar:
         for data, src, _ in ctx.rows():
-            image = cv2.imread(src)
+            image = cv2.imread(str(src))
             
             plates, debug_img = detect_armor_plates(image, color="blue", debug = debug)
             
