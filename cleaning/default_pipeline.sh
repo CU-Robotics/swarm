@@ -24,4 +24,5 @@ fi
     undistort.py \
     plate_detector.py \
     verify_bbox.py \
-    label_bbox.py
+    crop.py
+    # label_bbox.py
