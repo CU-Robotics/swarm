@@ -18,7 +18,7 @@ def main():
     
     with tqdm(total=ctx.row_count(), unit="img", desc=f"Filtering corrupted images") as bar:
         for data, src, _ in ctx.rows():
-            image = cv2.imread(src)
+            image = cv2.imread(str(src))
             mask = cv2.inRange(image, lower, upper)
  
             # count how many non-zero pixels are in the mask
