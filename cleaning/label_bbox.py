@@ -1,97 +1,73 @@
 #!/usr/bin/env python3
 import cv2
-import sys
-import numpy as np
 import pipeline
 import logging
-from util import TextBox, silence_stderr, KeyCode
-from tqdm import tqdm
+import pathlib
+import numpy as np
+from util import TextBox
+from flask import Flask, send_from_directory, request, jsonify, Response
 
-BASE_BORDER = 1
+app = Flask(__name__)
 
-# globals for drawing
-drawing = False
-curr_image = None
-ox, oy = -1, -1
+# load metadata
+ctx = pipeline.get_stage_context()
+rows = list(ctx.rows(filter_by={False})) # query all invalid rows
+image_index = 0
 
-def mouse(event, x, y, flags, param):
-    global curr_image, drawing, ox, oy
-    if curr_image is None:
-        return
-    
-    if event == cv2.EVENT_LBUTTONDOWN:
-        drawing = True
-        ox, oy = x, y
-    elif event == cv2.EVENT_MOUSEMOVE:
-        if drawing:
-            image = curr_image.copy()
-            cv2.rectangle(image, (ox, oy), (x, y), (0, 255, 0), 2)
-            with silence_stderr():
-                cv2.imshow("review image", image)
-    elif event == cv2.EVENT_LBUTTONUP:
-        drawing = False
-        rect = (ox, oy, x, y)
-        logging.error(rect)
-        cv2.rectangle(curr_image, (ox, oy), (x, y), (0, 255, 0), 2)
-        with silence_stderr():
-            cv2.imshow("review image", curr_image)
+frontend_path = pathlib.Path.cwd() / "frontend"
 
-def main():
-    global curr_image
+@app.route("/")
+def get_index():
+    return send_from_directory(frontend_path, "index.html")
 
-    ctx = pipeline.get_stage_context()
-    rows = list(ctx.rows(filter_by={False})) # query all invalid rows
+@app.route("/frontend/<path:filename>")
+def get_frontend(filename):
+    return send_from_directory(frontend_path, filename)
 
-    if len(rows) == 0:
-        logging.info("no invalid images, skipping stage")
-        sys.exit(0)
+@app.route("/image/current")
+def get_current_image():
+    data, src, _ = rows[image_index]
+    image = cv2.imread(str(src))
+    gamma = 2
+    gain = 1.5 # multiply final intensity
+    invGamma = 1.0 / gamma
+    table = np.array([((i / 255.0) ** invGamma) * 255 * gain for i in range(256)])
+    table = np.clip(table, 0, 255).astype("uint8")
+    eq = cv2.LUT(image, table)
+    with TextBox(eq, scale=3, thickness=2) as tb:
+        tb.write(data["name"])
+        tb.write(f"{image_index+1}/{len(rows)}", color=(0, 255, 255))
+    success, buf = cv2.imencode(".png", eq, [cv2.IMWRITE_PNG_COMPRESSION, 0])
+    if not success:
+        return "encode failed", 500
+    return Response(buf.tobytes(), mimetype="image/png")
 
-    edits = []
+@app.route("/image/skip", methods=["POST"])
+def post_next_image():
+    global image_index
+    image_index = (image_index + int(request.args.get("jump"))) % len(rows)
+    return jsonify({"index": image_index, "total": len(rows)})
 
-    cv2.namedWindow("review image")
-    cv2.setMouseCallback("review image", mouse)
+@app.route("/image/labels", methods=["GET"])
+def get_image_labels():
+    data, _, _ = rows[image_index]
+    plates = data["labels"].get("plates", [])
+    return jsonify({"plates": plates})
 
-    with tqdm(total=len(rows), unit="img", desc=f"Labeling missing plates") as bar:
-        image_index = 0
-        done = False
+@app.route("/image/labels", methods=["POST"])
+def post_image_labels():
+    new_plates = request.get_json()
+    data, _, _ = rows[image_index]
+    data["labels"]["plates"] = new_plates.get("plates", [])
+    return "success", 200
 
-        while not done:
-            data, src, _ = rows[image_index]
-            undist = cv2.imread(src)
-
-            first_view = True
-            while True:
-                image = undist.copy()
-                rsz = cv2.resize(image, None, fx=0.5, fy=0.5)
-
-                with silence_stderr():
-                    cv2.imshow("review image", rsz)
-                
-                curr_image = rsz
-
-                key = cv2.waitKey(0) & 0xff
-                if key == ord(" "):
-                    # queue next image
-                    image_index = (image_index + 1) % len(rows)
-                    bar.n = max(bar.n, image_index + 1)
-                    bar.refresh()
-                    break
-                elif key == KeyCode.BACKSPACE:
-                    # queue next image
-                    image_index = (image_index - 1) % len(rows)
-                    bar.n = max(bar.n, image_index + 1)
-                    bar.refresh()
-                    break
-                elif key == KeyCode.ESCAPE:
-                    bar.n = len(rows)
-                    bar.refresh()
-                    done = True
-                    break
-                
-                first_view = False
-    
-    cv2.destroyAllWindows()
-    ctx.update()
 
 if __name__ == "__main__":
-    main()
+    # disable internal flask logger
+    logging.getLogger("werkzeug").setLevel(logging.ERROR)
+    
+    host = "127.0.0.1"
+    port = 8000
+
+    logging.info(f"labeler running at: http://{host}:{port}")
+    app.run(host=host, port=port, debug=False)
