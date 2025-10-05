@@ -1,254 +1,190 @@
-import * as util from "/frontend/util.js"
+import { Labeler, clamp, zip } from '/frontend/util.js'
+
+const MIN_SCALE = 0.5;
+const MIN_PLATE_AREA = 100;
 
 const canvas = document.getElementById('canvas')
 const ctx = canvas.getContext('2d')
+const labeler = new Labeler()
 
-let image = new Image();
-let plates = [];
-let plateStart = null;
-let plateCurrent = null;
-let settings = {
-    scale: 0.5,
-    minScale: 0.5,
-    offset: [0, 0],
-    prev: [0, 0],
-    dragging: false,
-    drawingBox: false,
-};
-let selectedBox = null;
-let boxes = [];
+// setup
 const keys = {};
+const view = {
+    offset: {x: 0, y: 0},
+    prev: {x: 0, y: 0},
+    scale: MIN_SCALE,
+    panning: false,
+};
 
+// load initial image
+await updateImage();
+requestAnimationFrame(globalRedraw);
 
-
-document.addEventListener('keydown', async e => {
-    keys[e.key] = true
-    switch (e.key) {
-        case 'Backspace':
+// input
+document.addEventListener('keydown', async ev => {
+    keys[ev.key] = true;
+    switch (ev.key) {
+        // seek image
         case ' ':
-            const jump = e.key == ' ' ? +1 : -1;
-            const body = JSON.stringify({
-                plates: boxes.map(box => box.map(coord => Math.round(coord))),
-            });
-            await fetch("/image/labels", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body,
-            });
-            await fetch(`/image/skip?jump=${jump}`, {
-                method: "POST",
-            });
-            boxes.length = 0;
-            await getCurrentImageAndLabels();
+        case 'Backspace':
+            const seek = ev.key == ' ' ? +1 : -1;
+            await labeler.commitChanges(seek);
+            await updateImage();
             break;
         case 'Escape':
-            if (settings.drawingBox) {
-                settings.drawingBox = false;
-                plateStart = plateCurrent = null;
-                requestAnimationFrame(draw);
-            }
+            labeler.discardPlate();
             break;
         case 't':
-            boxes = boxes.filter(b => b !== selectedBox);
-            selectedBox = null;
-            requestAnimationFrame(draw);
+            labeler.plates.discardFocusedPlate();
+            break;
     }
+
+    requestAnimationFrame(globalRedraw);
 });
-document.addEventListener('keyup', e => {
-    keys[e.key] = false
-    switch (e.key) {
-        case 'p':
-            settings.dragging = false;
+
+document.addEventListener('keyup', ev => {
+    keys[ev.key] = false
+    switch (ev.key) {
+        case 'd':    
+            if (labeler.pendingPlate.area() > MIN_PLATE_AREA && 
+                labeler.pendingPlate.w > Math.sqrt(MIN_PLATE_AREA) && 
+                labeler.pendingPlate.h > Math.sqrt(MIN_PLATE_AREA)) {
+                labeler.commitPendingPlate();
+            } else {
+                labeler.discardPlate();
+            }
+            requestAnimationFrame(globalRedraw);
             break;
     }
 });
 
-function clampOffset() {
-    const width = image.width * settings.scale;
-    const height = image.height * settings.scale;
+document.addEventListener('wheel', ev => {
+    ev.preventDefault();
 
-    if (width <= canvas.width) {
-        settings.offset[0] = (canvas.width - width) / 2;
-    } else {
-        settings.offset[0] = Math.min(0, Math.max(settings.offset[0], canvas.width - width));
+    const x = ev.offsetX;
+    const y = ev.offsetY;
+    const oldScale = view.scale;
+    const zoomFactor = 1.1;
+
+    view.scale *= ev.deltaY < 0 ? zoomFactor : zoomFactor**-1;
+    view.scale = Math.max(MIN_SCALE, view.scale);
+
+    const {x: vx, y: vy} = view.offset;
+    view.offset.x -= (x - vx) / oldScale * (view.scale - oldScale);
+    view.offset.y -= (y - vy) / oldScale * (view.scale - oldScale);
+
+    clampOffsets();
+    requestAnimationFrame(globalRedraw);
+});
+
+canvas.addEventListener('mousedown', ev => {
+    view.panning = true;
+
+    view.prev.x = ev.offsetX;
+    view.prev.y = ev.offsetY;
+
+    const {x, y} = rawToImage(ev.offsetX, ev.offsetY);
+    labeler.plates.pick(x, y);
+
+    if (keys.d) {
+        labeler.enqueuePlate(x, y);
     }
 
-    if (height <= canvas.height) {
-        settings.offset[1] = (canvas.height - height) / 2;
-    } else {
-        settings.offset[1] = Math.min(0, Math.max(settings.offset[1], canvas.height - height));
+    requestAnimationFrame(globalRedraw);
+});
+
+document.addEventListener('mouseup', ev => {
+    view.panning = false;
+
+    if (ev.target == canvas && labeler.pendingPlate) {
+        if (labeler.pendingPlate.area() > MIN_PLATE_AREA && 
+            labeler.pendingPlate.w > Math.sqrt(MIN_PLATE_AREA) && 
+            labeler.pendingPlate.h > Math.sqrt(MIN_PLATE_AREA)) {
+            labeler.commitPendingPlate();
+        } else {
+            labeler.discardPlate();
+        }
+    }
+
+    requestAnimationFrame(globalRedraw);
+});
+
+canvas.addEventListener('mouseleave', () => {
+    // ?
+});
+
+canvas.addEventListener('mousemove', ev => {
+    if (view.panning) {
+        if (!keys.d) {
+            const dx = ev.offsetX - view.prev.x;
+            const dy = ev.offsetY - view.prev.y;
+
+            view.offset.x += dx;
+            view.offset.y += dy;
+            view.prev.x = ev.offsetX;
+            view.prev.y = ev.offsetY;
+
+            clampOffsets();
+        } else {
+            const {x, y} = rawToImage(ev.offsetX, ev.offsetY);
+            labeler.pendingPlate?.update(x, y);
+        }
+
+        requestAnimationFrame(globalRedraw);
+    }
+});
+
+function rawToImage(x, y) {
+    return {
+        x: (x - view.offset.x) / view.scale,
+        y: (y - view.offset.y) / view.scale,
+    };
+}
+
+function clampOffsets() {
+    const [iw, ih] = [labeler.image.width * view.scale, labeler.image.height * view.scale];
+
+    // apply clamps to offset values
+    for (const [i, im_size, canvas_size] of zip("xy", [iw, ih], [canvas.width, canvas.height])) {
+        if (im_size <= canvas_size) {
+            view.offset[i] = (canvas_size - im_size) / 2;
+        } else {
+            view.offset[i] = clamp(view.offset[i], canvas_size - im_size, 0);
+        }
     }
 }
 
-image.onload = () => {
-    canvas.width = image.width * 0.5;
-    canvas.height = image.height * 0.5;     
-    settings.offset = [0, 0];
-    settings.scale = settings.minScale;
+async function updateImage() {
+    await labeler.update();
 
-    requestAnimationFrame(draw);
-};
+    canvas.width = labeler.image.width * MIN_SCALE;
+    canvas.height = labeler.image.height * MIN_SCALE;     
+    view.offset.x = view.offset.y = 0;
+    view.scale = MIN_SCALE;
+}
 
-canvas.addEventListener('wheel', e => {
-    e.preventDefault();
-    const x = e.offsetX;
-    const y = e.offsetY;
-    const oldScale = settings.scale;
-    const zoomFactor = 1.1;
-
-    settings.scale *= e.deltaY < 0 ? zoomFactor : 1/zoomFactor;
-    settings.scale = Math.max(settings.minScale, settings.scale);
-
-    const [offX, offY] = settings.offset;
-    settings.offset[0] -= (x - offX) / oldScale * (settings.scale - oldScale);
-    settings.offset[1] -= (y - offY) / oldScale * (settings.scale - oldScale);
-
-    clampOffset();
-    requestAnimationFrame(draw);
-});
-canvas.addEventListener('mousedown', e => {
-    settings.dragging = keys?.p; 
-    settings.prev[0] = e.clientX;
-    settings.prev[1] = e.clientY;
-
-    if (!keys?.p) {
-        settings.drawingBox = true;
-        const {x, y} = imageCoords(e.offsetX, e.offsetY);
-        plateStart = [x, y];
-    }
-
-    const {x, y} = imageCoords(e.offsetX, e.offsetY);
-    for (let i = boxes.length - 1; i >= 0; i--) {
-        const [bx, by, w, h] = boxes[i];
-        if (w <= 0 || h <= 0) console.log(boxes[i]);
-        if (x >= bx && x <= bx + w && y >= by && y <= by + h) {
-            selectedBox = boxes[i];
-            requestAnimationFrame(draw);
-            break;
-        }
-    }
-});
-canvas.addEventListener('mouseup', () => { 
-    settings.dragging = false 
-    if (settings.drawingBox) {
-        if (plateCurrent) {
-            const [x, y, w, h] = plateCurrent;
-            console.log(w*h);
-            if (w*h > 100) {
-                boxes.push(plateCurrent);
-            }
-        }
-        settings.drawingBox = false;
-        plateCurrent = plateStart = null;
-        requestAnimationFrame(draw);
-    }
-});
-canvas.addEventListener('mouseleave', () => { 
-    settings.dragging = false;
-    if (settings.drawingBox) {
-        settings.drawingBox = false;
-        plateCurrent = plateStart = null;
-        requestAnimationFrame(draw);
-    } 
-});
-canvas.addEventListener('mousemove', e => {
-    if (settings.dragging) {
-        const dx = e.clientX - settings.prev[0];
-        const dy = e.clientY - settings.prev[1];
-
-        settings.offset[0] += dx;
-        settings.offset[1] += dy;
-        settings.prev[0] = e.clientX;
-        settings.prev[1] = e.clientY;
-
-        clampOffset();
-        requestAnimationFrame(draw);
-    } else if (settings.drawingBox) {
-        let {x, y} = imageCoords(e.offsetX, e.offsetY);
-        let [ox, oy] = plateStart;
-        [ox, x] = [ox, x].sort((a,b)=>a-b);
-        [oy, y] = [oy, y].sort((a,b)=>a-b);
-
-        plateCurrent = [ox, oy, x-ox, y-oy];
-        requestAnimationFrame(draw);
-    }
-});
-
-function draw() {
+function globalRedraw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
-    ctx.translate(settings.offset[0], settings.offset[1]);
-    ctx.scale(settings.scale, settings.scale);
-    ctx.drawImage(image, 0, 0);
+    ctx.translate(view.offset.x, view.offset.y);
+    ctx.scale(view.scale, view.scale);
+    ctx.drawImage(labeler.image, 0, 0);
 
-    let lazy = null;
-    boxes.forEach((box, i) => {
-        if (box == selectedBox) {
-            lazy = () => {
-                ctx.lineWidth = 2 / settings.scale;
-                ctx.fillStyle = "rgba(255, 140, 0, 0.2)";
-                ctx.strokeStyle = "darkorange";
-                const [x, y, w, h] = box;
-                ctx.fillRect(x, y, w, h);
-                ctx.strokeRect(x, y, w, h);
-            }
-            return;
+    for (const plate of labeler) {
+        let border = null, fill = null, text = true;
+        if (plate == labeler.pendingPlate) {
+            border = "green";
+            text = false;
+        } else if (plate == labeler.plates.focusedPlate) {
+            border = "yellow";
+            fill = "rgba(255, 255, 0, 0.2)";
         } else {
-            ctx.lineWidth = 2 / settings.scale;
-            ctx.fillStyle = "rgba(0, 0, 255, 0.2)";
-            ctx.strokeStyle = "blue";
+            border = "cyan";
+            fill = "rgba(0, 255, 255, 0.2)";
         }
-        const [x, y, w, h] = box;
-        ctx.fillRect(x, y, w, h);
-        ctx.strokeRect(x, y, w, h);
-    });
-    lazy?.();
-    
-    if (plateCurrent) {
-        ctx.strokeStyle = 'green';
-        ctx.lineWidth = 2 / settings.scale;
-        const [x, y, w, h] = plateCurrent;
-        ctx.strokeRect(x, y, w, h);
+
+        plate.draw(ctx, view, fill, border, 2 * view.scale**-1, text);
     }
 
     ctx.restore();
 }
-
-function imageCoords(x, y) {
-    return {
-        x: (x - settings.offset[0]) / settings.scale,
-        y: (y - settings.offset[1]) / settings.scale,
-    };
-}
-
-async function getCurrentImageAndLabels() {
-    let [labels, blob] = await Promise.all([
-        fetch("/image/labels").then(r => r.json()),
-        fetch("/image/current").then(r => r.blob()),
-    ]);
-
-    // populate plates
-    boxes.length = 0;
-    labels.plates?.forEach(plate => {
-        boxes.push(plate);
-    });
-
-    // load the image
-    await new Promise(resolve => {
-        image.onload = resolve;
-        image.src = URL.createObjectURL(blob);
-    });
-
-    canvas.width = image.width * 0.5;
-    canvas.height = image.height * 0.5;     
-    settings.offset = [0, 0];
-    settings.scale = settings.minScale;
-
-    requestAnimationFrame(draw);
-}
-
-async function main() {
-    await getCurrentImageAndLabels();
-}
-
-main();

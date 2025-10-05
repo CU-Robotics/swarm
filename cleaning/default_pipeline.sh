@@ -23,5 +23,4 @@ fi
     kill_green.py \
     undistort.py \
     plate_detector.py \
-    verify_bbox.py \
     label_bbox.py

@@ -1,26 +1,28 @@
 export class ArmorPlate {
-    constructor(x = 0, y = 0, w = 0, h = 0) {
-        self.x = x;
-        self.y = y;
-        self.w = w;
-        self.h = h;
+    static ICON = null;
+    static COLOR = null;
+
+    constructor(x = 0, y = 0, w = 0, h = 0, icon = ArmorPlate.ICON, color = ArmorPlate.COLOR) {
+        this.x = this.anchorX = x;
+        this.y = this.anchorY = y;
+        this.w = w;
+        this.h = h;
+        this.icon = icon;
+        this.color = color;
     }
 
-    update(x, y) {
-        let ox = this.x;
-        let oy = this.y;
+    update(freeX, freeY) {
+        const [x1, x2] = [this.anchorX, freeX].sort((a, b) => a - b);
+        const [y1, y2] = [this.anchorY, freeY].sort((a, b) => a - b);
 
-        [ox, x] = [ox, x].sort((a, b) => a - b);
-        [oy, y] = [oy, y].sort((a, b) => a - b);
-
-        this.x = ox;
-        this.y = oy;
-        this.w = x - ox;
-        this.y = y - oy;
+        this.x = x1;
+        this.y = y1;
+        this.w = x2 - x1;
+        this.h = y2 - y1;
     }
 
     area() {
-        return self.w * self.h;
+        return this.w * this.h;
     }
 
     contains(x, y) {
@@ -28,13 +30,31 @@ export class ArmorPlate {
                 y >= this.y && y <= this.y + this.h);
     }
 
-    draw(ctx, fillStyle, strokeStyle, lineWidth) {
+    draw(ctx, view, fillStyle, strokeStyle, lineWidth, drawText = true, textMargin = 5) {
         ctx.lineWidth = lineWidth;
         ctx.strokeStyle = strokeStyle;
-        ctx.fillStyle = fillStyle;
 
-        ctx.fillRect(this.x, this.y, this.w, this.h);
+        if (fillStyle) {
+            ctx.fillStyle = fillStyle;
+            ctx.fillRect(this.x, this.y, this.w, this.h);
+        }
+        
         ctx.strokeRect(this.x, this.y, this.w, this.h);
+
+        if (drawText) {
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+            const x = this.x * view.scale + view.offset.x;
+            const y = this.y * view.scale + view.offset.y;
+            const label = `${this.color} ${this.icon}`;
+            const fontSize = 12;
+
+            ctx.fillStyle = "white";
+            ctx.font = `${fontSize}px monospace`;
+            ctx.fillText(label, textMargin + x, textMargin + fontSize + y);
+            ctx.restore();
+        }
     }
 
     *[Symbol.iterator]() {
@@ -51,8 +71,17 @@ export class ArmorPlates {
         this.focusedPlate = null;
     }
 
+    discardFocusedPlate() {
+        const idx = this.list.indexOf(this.focusedPlate);
+        if (idx >= 0) {
+            this.list.splice(idx, 1);
+        }
+    }
+
     pick(x, y) {
-        for (const plate of this.list) {
+        for (let i = this.list.length - 1; i >= 0; i--) {
+            const plate = this.list[i];
+
             if (plate.contains(x, y)) {
                 this.focusedPlate = plate;
                 return;
@@ -94,12 +123,15 @@ export class Labeler {
         this.pendingPlate = null;
     }
 
-    commitPlate() {
-        this.plates.push(this.pendingPlate);
-        this.pendingPlate = null;
+    commitPendingPlate() {
+        if (this.pendingPlate) {
+            this.plates.list.push(this.pendingPlate);
+            this.plates.focusedPlate = this.pendingPlate;
+            this.pendingPlate = null;
+        }
     }
 
-    async commitAndUpdate(seek = 1) {
+    async commitChanges(seek = 1) {
         this.commitQueue = this.commitQueue.then(async () => {
             // save current labels
             const body = JSON.stringify({
@@ -120,6 +152,8 @@ export class Labeler {
 
             await this.update();
         });
+
+        return this.commitQueue;
     }
 
     async update() {
@@ -128,10 +162,13 @@ export class Labeler {
             fetch("/image/current").then(r => r.blob()),
         ]);
 
+        ArmorPlate.ICON = labels.icon ?? "none";
+        ArmorPlate.COLOR = labels.color ?? "none";
+
         // populate all plates
         this.plates.list.length = 0;
         labels.plates?.forEach(plate => {
-            this.plates.list.push(plate); 
+            this.plates.list.push(new ArmorPlate(...plate)); 
         });
 
         // load image
@@ -140,4 +177,21 @@ export class Labeler {
             this.image.src = URL.createObjectURL(blob);
         });
     }
+
+    *[Symbol.iterator]() {
+        yield* this.plates;
+        
+        if (this.pendingPlate) {
+            yield this.pendingPlate;
+        }
+    }
+}
+
+export function clamp(v, lo, hi) {
+    return Math.min(hi, Math.max(v, lo));
+}
+
+export function zip(...arrs) {
+    const len = Math.min(...arrs.map(arr => arr.length));
+    return Array.from({ length: len }, (_, i) => arrs.map(arr => arr[i]));
 }
