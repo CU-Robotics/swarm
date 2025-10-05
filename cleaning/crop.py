@@ -26,8 +26,10 @@ def main():
             # resize image to target size
             cropped = cv2.resize(cropped, (target_x_pixels, target_y_pixels))
 
+            bw = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
+            
             # save cropped image
-            cv2.imwrite(str(dst), cropped)
+            cv2.imwrite(str(dst), bw)
         
         
     # update metadata

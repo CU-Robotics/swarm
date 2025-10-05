@@ -16,15 +16,19 @@ class CustomImageDataset(Dataset):
         self.transform = transform                          
 
     def __len__(self):
-        return len(self.img_labels["examples"])
+        return len(self.img_labels)
 
     # gets image and label at index idx based on position in json
     def __getitem__(self, idx):
-        img_name = self.img_labels["examples"][idx]["name"]
-        img_path = os.path.join(self.img_dir, img_name)
+        image_data = self.img_labels[idx]
+        img_name = image_data["name"]
+        img_folder = image_data["folder"]
+
+        img_path = os.path.join(self.img_dir, img_folder, "cropped", img_name)
         
         image = Image.open(img_path).convert("RGB")
-        label = classes[self.img_labels["examples"][idx]["labels"]["icon"]] 
+
+        label = classes[image_data["labels"]["icon"]] 
 
         if self.transform:
             image = self.transform(image)
