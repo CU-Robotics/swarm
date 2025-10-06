@@ -23,4 +23,5 @@ fi
     kill_green.py \
     undistort.py \
     plate_detector.py \
-    label_bbox.py
+    label_bbox.py \ 
+    crop.py

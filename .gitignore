@@ -1,7 +1,11 @@
 testing_data/*
 *.json
-cleaning/sandbox.py
+*/*sandbox.py
 __pycache__/
+myenv/*
+collections/daniel
+
+*.pth
 
 # add examples but not testing outputs
 .latest-pipeline-new-files

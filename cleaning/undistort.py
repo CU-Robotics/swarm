@@ -28,10 +28,10 @@ def main():
     # iterate over data rows
     with tqdm(total=ctx.row_count(), unit="img", desc=f"Undistorting images") as bar:
         for data, src, dst in ctx.rows():
-            image = cv2.imread(src)
+            image = cv2.imread(str(src))
             fixed = cv2.remap(image, x_map, y_map, interpolation=cv2.INTER_LINEAR)
             data["labels"]["undistort_calib_batch"] = calib_path.stem
-            cv2.imwrite(dst, fixed)
+            cv2.imwrite(str(dst), fixed)
             bar.update(1)
 
     # update metadata
