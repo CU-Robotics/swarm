@@ -1,19 +1,78 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>CURO Labeler</title>
         <style>
             html, body {
-                background-color: black;
+                background-color: #272727;
+                color: #eee;
+                font-size:12pt;
+                font-family: sans-serif;
             }
 
-            p, li {
-                font-family: sans-serif
+            canvas {
+                box-shadow: 0em 0em 0.5em rgba(0, 0, 0, 0.5);
+            }
+
+            button {
+                margin: 0.2em;
+                color: #eee;
+                font-size: 12pt;
+                padding: 0.4em;
+                border: none;
+                border-radius: 0.1em;
+                box-shadow: 0em 0em 0.2em rgba(0, 0, 0, 0.5);
+                background-color: #383838;
+                transition: background-color 0.2s;
+            }
+
+            button:active {
+                box-shadow: none;
+            }
+
+            button:enabled:hover {
+                background-color: #858585;
+                transition: background-color 0.2s;
+            }
+
+            kbd  {
+                background-color: #eeeeee;
+                border-radius: 3px;
+                border: 1px solid #b4b4b4;
+                box-shadow:
+                    0 1px 1px rgb(0 0 0 / 0.2),
+                    0 2px 0 0 rgb(255 255 255 / 0.7) inset;
+                color: #333333;
+                display: inline-block;
+                font-size: 0.85em;
+                font-weight: 700;
+                line-height: 1;
+                padding: 2px 4px;
+                white-space: nowrap;
+            }
+
+            li {
+                margin: 0 0 0.5em 0;
             }
         </style>
     </head>
     <body>
         <canvas id="canvas"></canvas>
+        <div>
+            <button id="save">commit</button>
+            <button id="kill">commit & kill instance</button>
+
+            <ul>
+                <li><kbd>space</kbd> &RightArrow; next image</li>
+                <li><kbd>backspace</kbd> &RightArrow; previous image</li>
+                <li><kbd>d</kbd> + click & drag &RightArrow; draw box</li>
+                <li><kbd>escape</kbd> &RightArrow; cancel draw</li>
+                <li>click &RightArrow; cancel draw</li>
+                
+                <li><kbd>t</kbd> &RightArrow; delete selected box</li>
+                
+            </ul>
+        </div>
+        <div>
         <script src="/frontend/index.js" type="module"></script>
     </body>
 </html>

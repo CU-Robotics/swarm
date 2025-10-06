@@ -36,9 +36,9 @@ def run_token_server(q: multiprocessing.Queue, host, port):
         table = np.array([((i / 255.0) ** invGamma) * 255 * gain for i in range(256)])
         table = np.clip(table, 0, 255).astype("uint8")
         eq = cv2.LUT(image, table)
-        with TextBox(eq, scale=3, thickness=2) as tb:
-            tb.write(data["name"])
-            tb.write(f"{image_index+1}/{len(rows)}", color=(0, 255, 255))
+        with TextBox(eq, scale=2.5, thickness=2, line_spacing=16) as tb:
+            tb.write(data["name"], color=(0, 255, 255), end = " ")
+            tb.write(f"({image_index+1}/{len(rows)})", color=(0, 255, 255))
         success, buf = cv2.imencode(".png", eq, [cv2.IMWRITE_PNG_COMPRESSION, 0])
         if not success:
             return "encode failed", 500
@@ -60,15 +60,18 @@ def run_token_server(q: multiprocessing.Queue, host, port):
         new_plates = request.get_json()
         data, _, _ = rows[image_index]
         data["labels"]["plates"] = new_plates.get("plates", [])
-        return "success", 200
+        data["valid"] = len(data["labels"]["plates"]) > 0
+        return "", 204
     
     @app.route("/save", methods=["POST"])
     def save():
+        logging.info("pushing metadata changes to disc")
         ctx.update()
-        return "saved", 200
+        return "", 204
     
     @app.route("/kill", methods=["POST"])
     def kill():
+        logging.info(f"killing labeler instance, pushing metadata changes to disc")
         ctx.update()
         q.put(True)
         return "", 204
@@ -88,4 +91,3 @@ if __name__ == "__main__":
     logging.info(f"labeler running at: http://{host}:{port}")
     q.get(block=True)
     p.terminate()
-    logging.info(f"killing labeler instance, pushing metadata changes")

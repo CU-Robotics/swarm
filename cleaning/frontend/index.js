@@ -1,11 +1,24 @@
 import { Labeler, clamp, zip } from '/frontend/util.js'
 
-const MIN_SCALE = 0.5;
+const MIN_SCALE = 0.45;
 const MIN_PLATE_AREA = 100;
 
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
-const labeler = new Labeler()
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const labeler = new Labeler();
+
+// saving
+['save', 'kill'].forEach(endpoint => {
+    document.getElementById(endpoint).addEventListener('click', async ev => {
+        ev.preventDefault();
+        await labeler.commitChanges(0);
+        await fetch(`/${endpoint}`, { method: "POST" });
+
+        if (endpoint == 'kill') {
+            location.reload();
+        }
+    });
+});
 
 // setup
 const keys = {};
@@ -46,7 +59,8 @@ document.addEventListener('keyup', ev => {
     keys[ev.key] = false
     switch (ev.key) {
         case 'd':    
-            if (labeler.pendingPlate.area() > MIN_PLATE_AREA && 
+            if (labeler.pendingPlate && 
+                labeler.pendingPlate.area() > MIN_PLATE_AREA && 
                 labeler.pendingPlate.w > Math.sqrt(MIN_PLATE_AREA) && 
                 labeler.pendingPlate.h > Math.sqrt(MIN_PLATE_AREA)) {
                 labeler.commitPendingPlate();
@@ -109,10 +123,6 @@ document.addEventListener('mouseup', ev => {
     requestAnimationFrame(globalRedraw);
 });
 
-canvas.addEventListener('mouseleave', () => {
-    // ?
-});
-
 canvas.addEventListener('mousemove', ev => {
     if (view.panning) {
         if (!keys.d) {
@@ -173,11 +183,11 @@ function globalRedraw() {
     for (const plate of labeler) {
         let border = null, fill = null, text = true;
         if (plate == labeler.pendingPlate) {
-            border = "green";
+            border = "orange";
             text = false;
         } else if (plate == labeler.plates.focusedPlate) {
             border = "yellow";
-            fill = "rgba(255, 255, 0, 0.2)";
+            fill = "rgba(255, 255, 0,  0.2)";
         } else {
             border = "cyan";
             fill = "rgba(0, 255, 255, 0.2)";

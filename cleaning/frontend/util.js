@@ -136,7 +136,7 @@ export class Labeler {
             // save current labels
             const body = JSON.stringify({
                 // serialize plates
-                plates: this.plates.list.map(plate => [...plate]),
+                plates: this.plates.list.map(plate => [...plate].map(c => Math.round(c))),
             });
 
             await fetch("/image/labels", {

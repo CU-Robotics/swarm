@@ -62,7 +62,7 @@ class TextBox():
                 continue 
 
             # draw text
-            cv2.putText(self.frame, text, org=(self.cursor_x, self.cursor_y + text_height), fontFace=self.font, fontScale=self.scale, color=(0, 0, 0), thickness=self.thickness+2, lineType=cv2.LINE_AA)
+            cv2.putText(self.frame, text, org=(self.cursor_x, self.cursor_y + text_height), fontFace=self.font, fontScale=self.scale, color=(0, 0, 0), thickness=self.thickness+int(2 * self.scale), lineType=cv2.LINE_AA)
             cv2.putText(self.frame, text, org=(self.cursor_x, self.cursor_y + text_height), fontFace=self.font, fontScale=self.scale, color=color, thickness=self.thickness, lineType=cv2.LINE_AA)
 
             self.cursor_x += text_width
