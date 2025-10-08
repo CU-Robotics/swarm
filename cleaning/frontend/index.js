@@ -39,8 +39,10 @@ document.addEventListener('keydown', async ev => {
     switch (ev.key) {
         // seek image
         case ' ':
+        case 'ArrowRight':
+        case 'ArrowLeft':
         case 'Backspace':
-            const seek = ev.key == ' ' ? +1 : -1;
+            const seek = ev.key == ' ' || ev.key == 'ArrowRight' ? +1 : -1;
             await labeler.commitChanges(seek);
             await updateImage();
             break;

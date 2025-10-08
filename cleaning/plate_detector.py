@@ -114,13 +114,15 @@ def detect_armor_plates(image, color="blue", debug=True):
 
 def main():
     ctx = pipeline.get_stage_context()
+    data, _, _ = next(ctx.rows())
+    color = data["labels"].get("color")
 
     debug = False
     with tqdm(total=ctx.row_count(), unit="img", desc=f"Auto-detecting armor plates") as bar:
         for data, src, _ in ctx.rows():
             image = cv2.imread(str(src))
             
-            plates, debug_img = detect_armor_plates(image, color="blue", debug = debug)
+            plates, debug_img = detect_armor_plates(image, color, debug = debug)
             
             if debug:
                 # resize debug image for better visibility
