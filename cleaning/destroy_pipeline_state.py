@@ -12,8 +12,8 @@ def main():
     collection_path = meta_path.parent
 
     # delete existing meta
-    print(f"deleting metadata file: {meta_path.resolve()}")
-    meta_path.unlink(missing_ok=True)
+    # print(f"deleting metadata file: {meta_path.resolve()}")
+    # meta_path.unlink(missing_ok=True)
 
     for dirname in rest:
         assert dirname != "raw" # protect original data
