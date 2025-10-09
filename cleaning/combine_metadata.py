@@ -44,16 +44,20 @@ def main():
                 if data["valid"] == False:
                     continue
 
-                for plate in data["labels"]["plates"]:
+                for i, plate in enumerate(data["labels"]["plates"]):
                     combined = {}
+
+                    # if there are multiple plates, append -i to the name
+                    if len(data["labels"]["plates"]) > 1:
+                        combined["name"] = data["name"].replace(".png", f"-{i}.png")
+                    else:
+                        combined["name"] = data["name"]
+
                     combined["folder"] = folder
-                    combined["name"] = data["name"]
                     combined["plate"] = plate
-                    combined["labels"] = data["labels"]
-
-                    combined["labels"].pop("plates", None)
+                    combined["labels"] = data["labels"].copy()
+                    combined["labels"].pop("plates", None)  # remove plates key
                     
-
                     combined_metadata.append(combined)
     
     # write combined metadata to json file
