@@ -5,11 +5,48 @@ import sys
 import torchvision.transforms as transforms
 from torch.utils.data import random_split, DataLoader
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-import cv2
-
 import ConvNet
+
+
+device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+print(f'Using device: {device}')
+
+def train(dataloader: DataLoader, model:nn.Module, loss_fn, optimizer):
+    size = len(dataloader.dataset)
+    model.train()
+    for batch, (X, y) in enumerate(dataloader):
+        X, y = X.to(device), y.to(device)
+
+        # Compute prediction error
+        pred = model(X)
+        loss = loss_fn(pred, y)
+
+        # Backpropagation
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+
+        if batch % 100 == 0:
+            loss, current = loss.item(), (batch + 1) * len(X)
+            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+
+def test(dataloader: DataLoader, model:nn.Module, loss_fn):
+    size = len(dataloader.dataset)
+    num_batches = len(dataloader)
+    model.eval()
+    test_loss, correct = 0, 0
+    with torch.no_grad():
+        for X, y in dataloader:
+            X, y = X.to(device), y.to(device)
+            pred = model(X)
+            test_loss += loss_fn(pred, y).item()
+            correct += (pred.argmax(1) == y).type(torch.float).sum().item()
+    
+    test_loss /= num_batches
+    correct /= size
+    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
+    return (test_loss, correct)
 
 def main():
     if len(sys.argv) == 2:
@@ -23,8 +60,6 @@ def main():
 
     datadir = os.getcwd() + sys.argv[1]
     parent_dir = os.path.dirname(datadir)
-    parent_folder_name = os.path.basename(parent_dir)
-
     print("Reading from directory: " + datadir + "\n")
 
 
@@ -34,7 +69,8 @@ def main():
     [transforms.ToTensor(),
      transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-    dataset = ImageDataset.CustomImageDataset(annotations_file=parent_dir + '/combined_metadata.json', img_dir=datadir, transform=transform)
+    annotations_file = os.path.join(parent_dir, 'combined_metadata.json')
+    dataset = ImageDataset.CustomImageDataset(annotations_file, img_dir=datadir, transform=transform)
 
     # Split sizes
     train_size = int(0.8 * len(dataset))  # 80%
@@ -43,157 +79,28 @@ def main():
     # Random split
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
     
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                                          shuffle=True, num_workers=2)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
 
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
     
-    
-
     net = ConvNet.ConvNet()
+    net.to(device)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 
     for epoch in range(20):  # loop over the dataset multiple times
-
-        running_loss = 0.0
-        for i, data in enumerate(train_loader, 0):
-            # get the inputs; data is a list of [inputs, labels]
-            inputs, labels = data
-
-            # zero the parameter gradients
-            optimizer.zero_grad()
-
-            # forward + backward + optimize
-            outputs = net(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-
-            # print statistics
-            running_loss += loss.item()
-            
-            print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 1:.3f}')
-            running_loss = 0.0
+        print(f"Epoch {epoch+1}\n-------------------------------")
+        train(train_loader, net, criterion, optimizer)  
     
     PATH = './cifar_net.pth'
     torch.save(net.state_dict(), PATH)
 
     print('Finished Training')
 
-    # Test the network on the validation dataset while also showing image and guessing label
-    # correct = 0
-    # total = 0
-    # with torch.no_grad():
-    #     for data in val_loader:
-    #         images, labels = data
-    #         outputs = net(images)
-    #         _, predicted = torch.max(outputs.data, 1)
-    #         total += labels.size(0)
-    #         correct += (predicted == labels).sum().item()
+    test(val_loader, net, criterion)
 
-    #         for j, image in enumerate(images):
-    #             cv2.imshow('Image', (image.numpy().transpose((1, 2, 0)) * 255).astype('uint8'))
-    #             print('Predicted: ', ' '.join(f'{predicted[j]}'))
-    #             print('Actual: ', ' '.join(f'{labels[j]}'))
-    #             cv2.waitKey(0)  # Wait for a key press to move to the next image
     
-    # cv2.destroyAllWindows()
-
-    # show images of kernel applied to images
-    import torch.nn.functional as F
-    import cv2
-
-    correct = 0
-    total = 0
-
-    import cv2
-    import torch.nn.functional as F
-    import numpy as np
-
-    def to_img(tensor):
-        """Normalize tensor to 0-255 uint8 image."""
-        tensor = tensor.clone()
-        tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min() + 1e-5)
-        return (tensor * 255).byte().cpu().numpy()
-
-    def to_bgr(img):
-        """Ensure image is 3-channel BGR for cv2."""
-        if img.ndim == 2:
-            return cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        return img
-
-    def resize_to_height(img, target_height):
-        """Resize an image while keeping aspect ratio to a target height."""
-        return cv2.resize(img, (int(img.shape[1] * target_height / img.shape[0]), target_height))
-
-    total = 0
-    correct = 0
-    debug = False
-
-    with torch.no_grad():
-        for images, labels in val_loader:
-            outputs = net(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-
-            if debug:
-                for idx in range(len(images)):
-                    image = images[idx].unsqueeze(0)  # [1,3,H,W]
-                    label = labels[idx]
-
-                    # ---- original ----
-                    orig = to_img(image.squeeze(0)).transpose(1,2,0)  # HWC
-
-                    # ---- conv1 ----
-                    x1 = net.conv1(image)
-                    x1_img = to_img(x1[0,0])
-
-                    # ---- pool1 ----
-                    x1_pool = net.pool(x1)
-                    x1_pool_img = to_img(x1_pool[0,0])
-
-                    # ---- conv2 ----
-                    x2 = net.conv2(x1_pool)
-                    x2_img = to_img(x2[0,0])
-
-                    # ---- pool2 ----
-                    x2_pool = net.pool(x2)
-                    x2_pool_img = to_img(x2_pool[0,0])
-
-                    # Resize all feature maps to original height
-                    target_height = orig.shape[0]
-                    x1_img_resized = resize_to_height(x1_img, target_height)
-                    x1_pool_resized = resize_to_height(x1_pool_img, target_height)
-                    x2_img_resized = resize_to_height(x2_img, target_height)
-                    x2_pool_resized = resize_to_height(x2_pool_img, target_height)
-
-                    combined = cv2.hconcat([
-                        orig.astype('uint8'),
-                        to_bgr(x1_img_resized),
-                        to_bgr(x1_pool_resized),
-                        to_bgr(x2_img_resized),
-                        to_bgr(x2_pool_resized)
-                    ])
-                    
-                    cv2.imshow('Feature Maps', combined)
-                    print(f'Label: {label.item()}')
-                    print(f'Predicted: {predicted[idx].item()}')
-                    cv2.waitKey(0)
-
-                cv2.destroyAllWindows()
-
-
-    print(f'Accuracy of the network on the {total} validation images: {100 * correct / total} %')
-
-
-
-
- 
 if __name__ == "__main__":
     main()
-    # add return to new folder name
-    #/collections/armor_plates_9-14-25/examples/raw
+    
