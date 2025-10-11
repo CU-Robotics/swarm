@@ -29,7 +29,7 @@ def train(dataloader: DataLoader, model:nn.Module, loss_fn, optimizer):
 
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1) * len(X)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+            # print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
 
 def test(dataloader: DataLoader, model:nn.Module, loss_fn):
     size = len(dataloader.dataset)
@@ -45,8 +45,29 @@ def test(dataloader: DataLoader, model:nn.Module, loss_fn):
     
     test_loss /= num_batches
     correct /= size
-    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
+    # print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
     return (test_loss, correct)
+
+def multi_train(train_dataloader: DataLoader, val_dataloader: DataLoader, model:nn.Module, loss_fn, optimizer, epochs: int):
+    train_losses = []
+    val_losses = []
+    train_accuracies = []
+    val_accuracies = []
+
+    for epoch in range(epochs):
+        print(f"Epoch {epoch+1}\n-------------------------------")
+        train(train_dataloader, model, loss_fn, optimizer)
+        train_loss, train_acc = test(train_dataloader, model, loss_fn)
+        train_losses.append(train_loss)
+        train_accuracies.append(train_acc)
+        
+        val_loss, val_acc = test(val_dataloader, model, loss_fn)
+        val_losses.append(val_loss)
+        val_accuracies.append(val_acc)
+        print(f"Validation - Loss: {round(val_loss, 5)}, Accuracy: {round(val_acc, 5)}\n")
+    
+
+    return train_losses, val_losses, train_accuracies, val_accuracies
 
 def main():
     if len(sys.argv) == 2:
@@ -57,19 +78,24 @@ def main():
     
     # seed for reproducibility
     torch.manual_seed(389)
-
+    # print(os.getcwd())
     datadir = os.getcwd() + sys.argv[1]
+    # print("Datadir: " + datadir + "\n")
     parent_dir = os.path.dirname(datadir)
-    print("Reading from directory: " + datadir + "\n")
-
+    # print("Parent dir: " + parent_dir + "\n")
+    # print("Reading from directory: " + datadir + "\n")
 
     batch_size = 4
 
-    transform = transforms.Compose(
-    [transforms.ToTensor(),
-     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Grayscale(num_output_channels=1),
+        transforms.Normalize(0.5, 0.5)
+    ])
 
-    annotations_file = os.path.join(parent_dir, 'combined_metadata.json')
+    annotations_file = os.path.join(datadir, 'cleaned_metadata.json')
+    # print("Using parentdir file: " + parent_dir + "\n")
+    
     dataset = ImageDataset.CustomImageDataset(annotations_file, img_dir=datadir, transform=transform)
 
     # Split sizes
@@ -89,9 +115,7 @@ def main():
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 
-    for epoch in range(20):  # loop over the dataset multiple times
-        print(f"Epoch {epoch+1}\n-------------------------------")
-        train(train_loader, net, criterion, optimizer)  
+    multi_train(train_loader, val_loader, net, criterion, optimizer, epochs=10) 
     
     PATH = './cifar_net.pth'
     torch.save(net.state_dict(), PATH)
