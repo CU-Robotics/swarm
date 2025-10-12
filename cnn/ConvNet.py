@@ -20,7 +20,7 @@ class ConvNet(nn.Module):
 
         # Flatten: 128*12*12 = 18432
         self.fc1 = nn.Linear(128*12*12, 256)
-        self.fc2 = nn.Linear(256, 10)  # for 10 classes (example)
+        self.fc2 = nn.Linear(256, 7)  # for 7 classes (example)
 
     # how we want to pass the data through the network
     def forward(self, x):
