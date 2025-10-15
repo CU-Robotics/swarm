@@ -85,7 +85,7 @@ def main():
     # print("Parent dir: " + parent_dir + "\n")
     # print("Reading from directory: " + datadir + "\n")
 
-    batch_size = 4
+    batch_size = 32
 
     transform = transforms.Compose([
         transforms.ToTensor(),
