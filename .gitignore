@@ -6,6 +6,7 @@ myenv/*
 collections/daniel
 
 *.pth
+.env
 
 # add examples but not testing outputs
 .latest-pipeline-new-files
