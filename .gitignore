@@ -13,3 +13,4 @@ collections/daniel
 collections/*/examples/*
 !collections/*/examples/raw.tar.gz
 !collections/*/examples/pipeline-root.json
+collections/data
