@@ -170,6 +170,8 @@ def main():
             # cs.append(bw)
             cv2.imshow("test", bw)
             cv2.waitKey(1)
+            cv2.imwrite("TEST.png", bw, [cv2.IMWRITE_PNG_COMPRESSION, 0])
+            return
             # bw = bw.astype(np.float32) / 255.0
             bw = transform(Image.fromarray(bw))
             bw = bw.unsqueeze(0)
