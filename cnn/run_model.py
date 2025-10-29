@@ -146,12 +146,9 @@ def main():
             transforms.Lambda(lambda t: t.sqrt()),
         ])
 
-        fake_image = torch.randn(1, 1, 100, 100)  # Assuming the model expects a single-channel 100x100 image
-        # print(fake_image.shape)
-
         plates, _ = detect_armor_plates(image, color="red", debug=True)
         # print(len(plates))
-        cs = []
+        # cs = []
         for i, plate in enumerate(plates[:1]):
             # get bounding box
             x, y, w, h = plate
@@ -170,15 +167,15 @@ def main():
             cropped = cv2.resize(cropped, (target_x_pixels, target_y_pixels))
 
             bw = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
-            cs.append(bw)
-            cv2.imshow("test", cs[0])
+            # cs.append(bw)
+            cv2.imshow("test", bw)
             cv2.waitKey(1)
             # bw = bw.astype(np.float32) / 255.0
             bw = transform(Image.fromarray(bw))
             bw = bw.unsqueeze(0)
             print(bw.shape)
             output = model(bw)
-            predicted_class = classes[output.argmax(dim=1).item()]
+            predicted_class = classes[output.argmax().item()]
             print(predicted_class)
             print("=================")
 
