@@ -136,8 +136,8 @@ def main():
         if not ret:
             raise RuntimeError("no frame")
 
-        # classes = {0:'1', 1:'2', 2:'3', 3:'4', 4:'sentry', 5:'base', 6:'tower'}
-        classes = ["1", "2", "3", "4", "sentry", "base", "tower"]
+        classes = {1:'1', 2:'2', 3:'3', 4:'4', 5:'sentry', 6:'base', 7:'tower'}
+        # classes = ["1", "2", "3", "4", "sentry", "base", "tower"]
 
 
         transform = transforms.Compose([
