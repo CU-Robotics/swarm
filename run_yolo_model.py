@@ -1,6 +1,5 @@
 from pypylon import pylon
 import cv2 
-import onnxruntime as ort
 import ultralytics
 import os
 
