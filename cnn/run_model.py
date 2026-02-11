@@ -12,6 +12,7 @@ from PIL import Image
 # from swarm.cleaning.plate_detector import detect_armor_plates
 # Path to data to detect plates on
 parent_dir = pathlib.Path(__file__).resolve().parent
+print(parent_dir)
 config_path = parent_dir / "../cleaning/config.yaml"
 
 # Config info for color mask bounds
@@ -114,25 +115,31 @@ def detect_armor_plates(image, color="blue", debug=True):
 
     return armor_plates, image
 
-model = torch.load(os.getcwd() + '/../models/full_model.pth', map_location=torch.device('cpu'), weights_only=False)
+model = torch.load(parent_dir / '../models/best_model.pth', map_location=torch.device('cpu'), weights_only=False)
 
 
 target_x_pixels = 100
 target_y_pixels = 100
 
-def main():
-    cap = cv2.VideoCapture("/dev/stereo-cam-right-video", cv2.CAP_V4L2)
+threshold = 0.9
 
-    fmt = "UYVY"
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fmt))
+def main():
+    # cap = cv2.VideoCapture("/dev/stereo-cam-right-video", cv2.CAP_V4L2)
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+
+    # fmt = "UYVY"
+    # cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fmt))
+
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
     assert cap.isOpened()
 
+    guesses = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0}
+    queue = []
     while True:
         ret, image = cap.read()
-
+        
         if not ret:
             raise RuntimeError("no frame")
 
@@ -149,7 +156,9 @@ def main():
         plates, _ = detect_armor_plates(image, color="red", debug=True)
         # print(len(plates))
         # cs = []
+        
         for i, plate in enumerate(plates[:1]):
+            
             # get bounding box
             x, y, w, h = plate
             if w*h < 10:
@@ -168,18 +177,48 @@ def main():
 
             bw = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
             # cs.append(bw)
-            cv2.imshow("test", bw)
+            cv2.imshow("test", cropped)
             cv2.waitKey(1)
-            cv2.imwrite("TEST.png", bw, [cv2.IMWRITE_PNG_COMPRESSION, 0])
-            return
+            # cv2.imwrite("TEST.png", bw, [cv2.IMWRITE_PNG_COMPRESSION, 0])
+            # return
             # bw = bw.astype(np.float32) / 255.0
             bw = transform(Image.fromarray(bw))
             bw = bw.unsqueeze(0)
-            print(bw.shape)
+            # print(bw.shape)
+            
+            start_time = cv2.getTickCount()
             output = model(bw)
-            predicted_class = classes[output.argmax().item()]
-            print(predicted_class)
-            print("=================")
+            # predicted_class = classes[output.argmax().item()]
+            end_time = cv2.getTickCount()
+            time_taken = (end_time - start_time) / cv2.getTickFrequency()
+            fps = 1.0 / time_taken
+            # print(f"FPS: {fps:.2f}")
+
+            
+            probs = torch.exp(output)
+            max_probs, preds = torch.max(probs, dim=1)
+            preds[max_probs < threshold] = -1
+
+            guess = preds.item()
+            max_prob = max_probs.item()
+
+            # print(guess)
+            
+
+            if max_prob < threshold:
+                # print(f"Low confidence ({max_prob:.2f}), skipping prediction")
+                continue
+
+            print(max_probs.item(), classes[guess])
+            guesses[guess] += 1
+            queue.append(guess)
+            
+            if len(queue) > 100:
+                popped = queue.pop(0)
+                guesses[popped] -= 1
+            
+            print("Guesses:", guesses)
+            
 
         # if len(cs):
 

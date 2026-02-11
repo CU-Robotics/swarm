@@ -4,8 +4,12 @@ testing_data/*
 __pycache__/
 myenv/*
 collections/daniel
+sandbox/*
+YOLO/clean_yolo_dataset/*
+YOLO/data/*
 
 .env
+*.zip
 
 # add examples but not testing outputs
 .latest-pipeline-new-files
