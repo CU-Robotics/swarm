@@ -1,0 +1,34 @@
+services:
+  yolo:
+    container_name: yolo
+    build:
+      context: .
+    environment:
+      # # Authentification
+      # - BASIC_AUTH_USER=${BASIC_AUTH_USER}
+      # - BASIC_AUTH_PASS=${BASIC_AUTH_PASS}
+
+      # Log level
+      - LOG_LEVEL=${LOG_LEVEL}
+
+      # Paths
+      - PYTHONPATH=/app
+      - MODEL_DIR=./models
+      - MODEL_FILENAME=${MODEL_FILENAME}
+
+      - LABEL_STUDIO_URL=http://host.docker.internal:8080
+      - LABEL_STUDIO_API_KEY=${LABEL_STUDIO_API_KEY}
+      - TASK_TYPE=${TASK_TYPE}
+
+    ports:
+      - "9090:9090"
+    volumes:
+      - "./data/server:/data"
+      - "./models:/app/models"
+
+    develop:
+      watch:
+        - action: rebuild
+          path: ./model.py
+          target: /app/model.py
+          
