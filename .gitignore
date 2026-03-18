@@ -10,6 +10,7 @@ YOLO/data/*
 
 .env
 *.zip
+*.jpg
 
 # add examples but not testing outputs
 .latest-pipeline-new-files
