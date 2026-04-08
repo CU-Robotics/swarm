@@ -5,8 +5,7 @@ __pycache__/
 myenv/*
 collections/daniel
 sandbox/*
-YOLO/clean_yolo_dataset/*
-YOLO/data/*
+YOLO/datasets/*
 
 .env
 *.zip
