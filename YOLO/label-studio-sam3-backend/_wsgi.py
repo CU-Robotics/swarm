@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
     app = init_app(model_class=SAM3Backend, basic_auth_user=args.basic_auth_user, basic_auth_pass=args.basic_auth_pass)
 
-    app.run(host=args.host, port=args.port, debug=args.debug)
+    app.run(host=args.host, port=args.port, debug=args.debug, use_reloader=False)
 
 else:
     # for uWSGI use

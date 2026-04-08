@@ -3,54 +3,57 @@ from label_studio_ml.model import LabelStudioMLBase
 from label_studio_ml.response import ModelResponse
 
 import os
-import threading
 from typing import List, Dict, Optional
 
 import cv2
 from ultralytics.models.sam import SAM3SemanticPredictor
+import torch
 
 class SAM3Backend(LabelStudioMLBase):
-    def setup(self):
-        self.set("model_version", "sam3-plate-v1")
-        self.target_labels = ["Blank Plate", "Blue Plate", "Red Plate"]
-        self.exemplar_store = {label: [] for label in self.target_labels}
-        
-        self.predictor = None
-        self.model_ready = False
-        self.cached_image_url = None
-        # Values used for coordinate scaling
-        self.img_h = None
-        self.img_w = None
-        
-        # takes to long to load SAM3 so we put it on its own thread to avoid being timed out by Label Studio
-        threading.Thread(target=self._init_model).start()
+    _model_instance = None
 
-    def _init_model(self):
-        print("Initializing SAM 3 on GPU...")
+    def __init__(self, project_id, **kwargs):
+        super(SAM3Backend, self).__init__(project_id, **kwargs)
         
-        # model_dir = os.getenv("MODEL_DIR")
-        # model_filename = os.getenv("MODEL_FILENAME")
-        # model_filepath = os.path.join(model_dir, model_filename)
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        model_path = os.path.join(script_dir, "models", "sam3.pt")
-        print("Model path: " + str(model_path))
+        if SAM3Backend._model_instance is None:
+            print("--- INITIALIZING SAM 3 SINGLETON ---")
+            model_path = os.path.join(os.path.dirname(__file__), "models", "sam3.pt")
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            print(f"Using device: {device}")
 
-        overrides = dict(conf=0.25, task="segment", mode="predict", model=model_path, device="cuda", verbose=False)
-        self.predictor = SAM3SemanticPredictor(overrides=overrides)
-        self.predictor.setup_model()
+            overrides = dict(
+                model=model_path,
+                device='cuda',
+                task='segment',
+                half=True 
+            )
+
+            predictor = SAM3SemanticPredictor(overrides=overrides)
+            predictor.setup_model()
+            SAM3Backend._model_instance = predictor
+            print("SAM 3 model loaded successfully.")
+        
+        # Point to the shared singleton
+        self.predictor = SAM3Backend._model_instance
         self.model_ready = True
-        print("SAM 3 ready for Plate Detection.")
+        
+        # State management
+        self.target_labels = ["Blank Plate", "Blue Plate", "Red Plate"]
+        self.exemplar_store = {label: [] for label in self.target_labels} # store exemplars for each label
+        self.cached_image_url = None
+        self.img_h, self.img_w = None, None
 
     def predict(self, tasks: List[Dict], context: Optional[Dict] = None, **kwargs) -> ModelResponse:
         if not self.model_ready:
+            print("Model not ready, returning empty predictions.")
             return ModelResponse(predictions=[])
 
         task = tasks[0]
         image_url = task['data'].get('image') or task['data'].get('image_url')
+        image_path = self.get_local_path(image_url)
         
-        # Have we seen this image? If not, load it and set it for the predictor
+        # Load image and set features once per image
         if self.cached_image_url != image_url:
-            image_path = self.get_local_path(image_url)
             self.predictor.set_image(image_path)
             img = cv2.imread(image_path)
             self.img_h, self.img_w = img.shape[:2]
@@ -58,69 +61,61 @@ class SAM3Backend(LabelStudioMLBase):
 
         predictions = []
 
-        if context and 'result' in context:
-            for ctx in context['result']:
-                if ctx['type'] == 'rectanglelabels':
-                    v = ctx['value']
-                    bx = [
-                        v['x'] * self.img_w / 100, 
-                        v['y'] * self.img_h / 100, 
-                        (v['x'] + v['width']) * self.img_w / 100, 
-                        (v['y'] + v['height']) * self.img_h / 100
-                    ]
-                    
-                    _, boxes = self.predictor.inference_features(
-                        self.predictor.features, bboxes=[bx], src_shape=(self.img_h, self.img_w)
-                    )
-                    if boxes is not None:
-                        predictions.append(self._format_box(boxes[0], v['rectanglelabels'], ctx))
-        else:
-            for label_name in self.target_labels:
-                exemplars = self.exemplar_store[label_name]
-                prompt_kwargs = {"exemplars": exemplars} if exemplars else {"text": [label_name]}
-                
-                _, boxes = self.predictor.inference_features(
-                    self.predictor.features, 
-                    src_shape=(self.img_h, self.img_w),
-                    **prompt_kwargs
-                )
-                
-                if boxes is not None:
-                    for b in boxes:
-                        predictions.append(self._format_box(b, [label_name]))
+        # Use the high-level predictor call to handle exemplars/text correctly
+        for label_name in self.target_labels:
+            exemplars = self.exemplar_store[label_name]
+            
+            # If we have exemplars (few-shot), use the first one as the 'golden' reference
+            if exemplars:
+                # exemplar format: {"img": path, "bboxes": [[x1,y1,x2,y2]], "labels": [1]}
+                results = self.predictor(exemplar=exemplars[0])
+            else:
+                # Fallback to text if no manual labels exist yet
+                results = self.predictor(text=[label_name])
+            
+            if results and results[0].boxes is not None:
+                for b in results[0].boxes:
+                    predictions.append(self._format_box(b.xyxy[0], [label_name]))
 
         return ModelResponse(predictions=predictions)
 
     def fit(self, event, data, **kwargs):
+        """ Stores the user's manual annotations as exemplars for future predictions """
         if event not in ['ANNOTATION_CREATED', 'ANNOTATION_UPDATED']:
             return
 
         image_url = data['task']['data'].get('image') or data['task']['data'].get('image_url')
-        img = cv2.imread(self.get_local_path(image_url))
-        h, w = img.shape[:2] # Define locally to avoid AttributeError
-
+        image_path = self.get_local_path(image_url)
+        
         for result in data['annotation']['result']:
             if result['type'] == 'rectanglelabels':
                 v = result['value']
-                # Safety check if user didn't select a label
                 if not v.get('rectanglelabels'): continue
                 
                 label = v['rectanglelabels'][0]
                 
-                x1, y1 = int(v['x'] * w / 100), int(v['y'] * h / 100)
-                x2, y2 = int((v['x'] + v['width']) * w / 100), int((v['y'] + v['height']) * h / 100)
+                # Convert percent coordinates to pixel coordinates
+                x1 = v['x'] * self.img_w / 100
+                y1 = v['y'] * self.img_h / 100
+                x2 = (v['x'] + v['width']) * self.img_w / 100
+                y2 = (v['y'] + v['height']) * self.img_h / 100
                 
-                if (x2 - x1) > 2 and (y2 - y1) > 2:
-                    crop = img[y1:y2, x1:x2]
-                    feat = self.predictor.extract_exemplar_features(crop)
-                    self.exemplar_store[label].append(feat)
-                    self.exemplar_store[label] = self.exemplar_store[label][-15:]
+                # Store the data required for an 'exemplar' prompt
+                new_exemplar = {
+                    "img": image_path,
+                    "bboxes": [[x1, y1, x2, y2]],
+                    "labels": [1]
+                }
+                
+                self.exemplar_store[label].insert(0, new_exemplar)
+                self.exemplar_store[label] = self.exemplar_store[label][:5] # Keep last 5
 
     def _format_box(self, box, labels, ctx=None):
+        # Ensure box is on CPU and numpy for scaling
         b = box.cpu().numpy()
         return {
-            "from_name": ctx['from_name'] if ctx else "label",
-            "to_name": ctx['to_name'] if ctx else "image",
+            "from_name": "label",
+            "to_name": "image",
             "type": "rectanglelabels",
             "value": {
                 "x": (b[0] / self.img_w) * 100, 

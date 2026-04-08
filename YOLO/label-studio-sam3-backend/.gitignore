@@ -1,0 +1,15 @@
+# Data
+logs
+data
+
+# Models
+models
+best.pt
+best_seg.pt
+best_det.pt
+
+# Env
+.env
+
+__pycache__
+.ipynb_checkpoints

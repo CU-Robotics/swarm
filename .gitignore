@@ -11,6 +11,7 @@ YOLO/datasets/*
 *.zip
 *.jpg
 *.png
+*.db
 
 # add examples but not testing outputs
 .latest-pipeline-new-files
