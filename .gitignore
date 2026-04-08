@@ -10,10 +10,11 @@ YOLO/datasets/*
 .env
 *.zip
 *.jpg
+*.png
 
 # add examples but not testing outputs
 .latest-pipeline-new-files
-collections/*/examples/*
-!collections/*/examples/raw.tar.gz
-!collections/*/examples/pipeline-root.json
-collections/data
+old_cnn_code/collections/*/examples/*
+!old_cnn_code/collections/*/examples/raw.tar.gz
+!old_cnn_code/collections/*/examples/pipeline-root.json
+old_cnn_code/collections/data
