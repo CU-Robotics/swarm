@@ -32,7 +32,13 @@ class SAM3Backend(LabelStudioMLBase):
     _prompts = None
 
     def setup(self):
-        
+        """ 
+            Initializes the SAM3 Backend
+
+            LabelStudioMLBase will create a new instance of SAM3Backend for each worker process, 
+            but we only want to initialize the heavy SAM 3 model and exemplar storage once per process, not once per instance.
+            To achieve this, we use class variables to store the model and related data, and check if it's already initialized before doing the setup work. 
+        """
         if SAM3Backend._initalized:
             logger.info("--- SKIP: SAM 3 already initialized in this process ---")
             # Just ensure the instance variables are linked
@@ -69,21 +75,33 @@ class SAM3Backend(LabelStudioMLBase):
                 
         for label, prompt in zip(self.target_labels, self.target_prompts):
             logger.debug(f"Label: '{label}' will use initial prompt: '{prompt}'")
+
+        SAM3Backend._initalized = True
+        logging.info("--- SAM 3 MODEL INITIALIZATION COMPLETE ---")
         
         
 
     def predict(self, tasks: List[Dict], context: Optional[Dict] = None, **kwargs) -> ModelResponse:
+        """ 
+        Uses the prompt and exeplars to generate predictions for the given task (image)
+        
+        returns a list of predictions in the label-studio format
+        """
         if not self.model_ready:
             logging.info("Model not ready, returning empty predictions.")
             return ModelResponse(predictions=[])
 
+        # assume one task at a time and breaks out important info
         task = tasks[0]
         image_url = task['data'].get('image') or task['data'].get('image_url')
         image_path = self.get_local_path(image_url)
 
         logger.debug(f"Processing Image URL: {image_url}")
         
+        # setup model
         self.predictor.set_image(image_path)
+        
+        # set image dimensions for the format_box
         img = cv2.imread(image_path)
         self.img_h, self.img_w = img.shape[:2]
         self.cached_image_url = image_url
@@ -91,12 +109,12 @@ class SAM3Backend(LabelStudioMLBase):
         logger.debug(f"Active prompts for this prediction: {self.target_prompts}")
         predictions = []
 
-        # Use the high-level predictor call to handle exemplars/text correctly
+        # For each of the possible labels, run model using the correct prompt and exemplars
         for i, label_name in enumerate(self.target_labels):
             exemplars = self.exemplar_store[label_name]
             logger.debug(f"Exemplars for {label_name}: {exemplars}")
             
-            # If we have exemplars (few-shot), use the first one as the 'golden' reference
+            # If we have exemplars, use with model. Will be slower
             if exemplars:
                 # exemplar format: {"img": path, "bboxes": [[x1,y1,x2,y2]], "labels": [1]}
                 results = self.predictor(exemplar=exemplars, text=[self.target_prompts[i]])
@@ -104,6 +122,7 @@ class SAM3Backend(LabelStudioMLBase):
                 # Fallback to text if no manual labels exist yet
                 results = self.predictor(text=[self.target_prompts[i]])
             
+            # If we have some bounding boxes, format them for label-studio and add to our predictions list
             if results and results[0].boxes is not None:
                 logger.info(f"Detected {len(results[0].boxes)} potential plates for label {label_name}")
                 for b in results[0].boxes:
@@ -111,7 +130,6 @@ class SAM3Backend(LabelStudioMLBase):
                     # return the bounding box, label, and confidence to be translated to label-studio form
                     predictions.append(self._format_box(b.xyxy[0], [label_name], b.conf[0])) 
 
-        # NEW (Valid format)
         return ModelResponse(predictions=[{'result': predictions}])
 
     def fit(self, event, data, **kwargs):
@@ -121,10 +139,7 @@ class SAM3Backend(LabelStudioMLBase):
 
         image_url = data['task']['data'].get('image') or data['task']['data'].get('image_url')
         image_path = self.get_local_path(image_url)
-        
-
-        full_img = cv2.imread(image_path)
-        
+                
         for result in data['annotation']['result']:
             if result['type'] == 'rectanglelabels':
                 v = result['value']
@@ -161,7 +176,7 @@ class SAM3Backend(LabelStudioMLBase):
                     unique_id = int(time.time() * 1000)
                     filename = f"crop_{unique_id}_{os.path.basename(image_path)}"
                     save_path = os.path.join(debug_dir, filename)
-
+                    full_img = cv2.imread(image_path)
                     crop = full_img[y1:y2, x1:x2]
                     if crop.size > 0:
                         cv2.imwrite(save_path, crop)
@@ -171,6 +186,7 @@ class SAM3Backend(LabelStudioMLBase):
                 self.exemplar_store[label] = self.exemplar_store[label][:5] # Keep last 5
 
     def _format_box(self, box, label, score=0.0):
+        """ converts model's box output to label-studio format """
         # .cpu().numpy() gets it off the GPU, 
         # but the array still contains float16 values.
         b = box.cpu().numpy()
