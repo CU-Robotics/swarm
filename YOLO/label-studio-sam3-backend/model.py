@@ -31,6 +31,9 @@ class SAM3Backend(LabelStudioMLBase):
     _labels = None
     _prompts = None
 
+    img_h = 1200
+    img_w = 1920
+
     def setup(self):
         """ 
             Initializes the SAM3 Backend
@@ -63,9 +66,9 @@ class SAM3Backend(LabelStudioMLBase):
         # Intilize all the stuff that needs to persist across instances in class variables, 
         SAM3Backend._model = SAM3SemanticPredictor(overrides=overrides)
         SAM3Backend._model.setup_model()
-        SAM3Backend._store = {label: [] for label in self.target_labels} # store exemplars for each label
         SAM3Backend._labels = os.getenv("LABELS").split(",") 
-        SAM3Backend._prompts = os.getenv("INITIAL_PROMPTS").split(",") 
+        SAM3Backend._prompts = os.getenv("INITIAL_PROMPTS").split(",")
+        SAM3Backend._store = {label: [] for label in SAM3Backend._labels} # store exemplars for each label 
 
         # and point instance variables to them
         self.predictor = SAM3Backend._model
@@ -87,7 +90,7 @@ class SAM3Backend(LabelStudioMLBase):
         
         returns a list of predictions in the label-studio format
         """
-        if not self.model_ready:
+        if not SAM3Backend._initalized:
             logging.info("Model not ready, returning empty predictions.")
             return ModelResponse(predictions=[])
 
@@ -143,8 +146,8 @@ class SAM3Backend(LabelStudioMLBase):
         for result in data['annotation']['result']:
             if result['type'] == 'rectanglelabels':
                 v = result['value']
-                self.img_w = v.get('original_width')
-                self.img_h = v.get('original_height')
+                self.img_w = result.get('original_width')
+                self.img_h = result.get('original_height')
 
                 logger.debug(f"Processing user annotation: {v}")
                 if not v.get('rectanglelabels'): continue
