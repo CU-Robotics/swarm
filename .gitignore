@@ -1,9 +1,7 @@
-testing_data/*
 *.json
 */*sandbox.py
 __pycache__/
 myenv/*
-collections/daniel
 sandbox/*
 YOLO/datasets/*
 
