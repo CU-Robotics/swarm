@@ -25,43 +25,52 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class SAM3Backend(LabelStudioMLBase):
-    _model_instance = None
+    _initalized = False
+    _model = None
+    _store = None
+    _labels = None
+    _prompts = None
 
-    def __init__(self, project_id, **kwargs):
-        super(SAM3Backend, self).__init__(project_id, **kwargs)
+    def setup(self):
         
-        if SAM3Backend._model_instance is None:
-            logging.info("--- INITIALIZING SAM 3 SINGLETON ---")
-            model_path = os.path.join(os.path.dirname(__file__), "models", "sam3.pt")
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
-            logging.info(f"Using device: {device}")
+        if SAM3Backend._initalized:
+            logger.info("--- SKIP: SAM 3 already initialized in this process ---")
+            # Just ensure the instance variables are linked
+            self.predictor = SAM3Backend._model
+            self.exemplar_store = SAM3Backend._store
+            self.target_labels = SAM3Backend._labels
+            self.target_prompts = SAM3Backend._prompts
+            return
+        
+        logging.info("--- INITIALIZING SAM 3 MODEL ---")
+        model_path = os.path.join(os.path.dirname(__file__), "models", "sam3.pt")
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        logging.info(f"Using device: {device}")
 
-            overrides = dict(
-                model=model_path,
-                device='cuda',
-                task='segment',
-                half=True 
-            )
+        overrides = dict(
+            model=model_path,
+            device='cuda',
+            task='segment',
+            half=True 
+        )
 
-            predictor = SAM3SemanticPredictor(overrides=overrides)
-            predictor.setup_model()
-            SAM3Backend._model_instance = predictor
-            logging.info("SAM 3 model loaded successfully.")
-        
-        # Point to the shared singleton
-        self.predictor = SAM3Backend._model_instance
-        self.model_ready = True
-        
-        # State management
-        self.target_labels = os.getenv("LABELS")
-        self.target_prompts = os.getenv("INITIAL_PROMPTS")
+        # Intilize all the stuff that needs to persist across instances in class variables, 
+        SAM3Backend._model = SAM3SemanticPredictor(overrides=overrides)
+        SAM3Backend._model.setup_model()
+        SAM3Backend._store = {label: [] for label in self.target_labels} # store exemplars for each label
+        SAM3Backend._labels = os.getenv("LABELS").split(",") 
+        SAM3Backend._prompts = os.getenv("INITIAL_PROMPTS").split(",") 
 
-        print(f"Loaded LABELS: {self.target_labels}")
-        print(f"Loaded INITIAL_PROMPTS: {self.target_prompts}")
+        # and point instance variables to them
+        self.predictor = SAM3Backend._model
+        self.exemplar_store = SAM3Backend._store
+        self.target_labels = SAM3Backend._labels
+        self.target_prompts = SAM3Backend._prompts
+                
+        for label, prompt in zip(self.target_labels, self.target_prompts):
+            logger.debug(f"Label: '{label}' will use initial prompt: '{prompt}'")
         
-        self.exemplar_store = {label: [] for label in self.target_labels} # store exemplars for each label
-        self.cached_image_url = None
-        self.img_h, self.img_w = 1200, 1920 # default values to avoid division by zero
+        
 
     def predict(self, tasks: List[Dict], context: Optional[Dict] = None, **kwargs) -> ModelResponse:
         if not self.model_ready:
@@ -74,14 +83,10 @@ class SAM3Backend(LabelStudioMLBase):
 
         logger.debug(f"Processing Image URL: {image_url}")
         
-        
-        # Load image and set features once per image
-        if self.cached_image_url != image_url:
-            self.predictor.set_image(image_path)
-            img = cv2.imread(image_path)
-            self.img_h, self.img_w = img.shape[:2]
-            self.cached_image_url = image_url
-
+        self.predictor.set_image(image_path)
+        img = cv2.imread(image_path)
+        self.img_h, self.img_w = img.shape[:2]
+        self.cached_image_url = image_url
     
         logger.debug(f"Active prompts for this prediction: {self.target_prompts}")
         predictions = []
@@ -116,11 +121,16 @@ class SAM3Backend(LabelStudioMLBase):
 
         image_url = data['task']['data'].get('image') or data['task']['data'].get('image_url')
         image_path = self.get_local_path(image_url)
+        
+
         full_img = cv2.imread(image_path)
         
         for result in data['annotation']['result']:
             if result['type'] == 'rectanglelabels':
                 v = result['value']
+                self.img_w = v.get('original_width')
+                self.img_h = v.get('original_height')
+
                 logger.debug(f"Processing user annotation: {v}")
                 if not v.get('rectanglelabels'): continue
                 
@@ -138,6 +148,8 @@ class SAM3Backend(LabelStudioMLBase):
                     "bboxes": [[x1, y1, x2, y2]],
                     "labels": [label]
                 }
+
+                logger.debug(f"New exemplar for label '{label}': {new_exemplar}")
 
                 # 3. Handle Debug Image Saving
                 if logger.isEnabledFor(logging.DEBUG):
