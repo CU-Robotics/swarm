@@ -3,9 +3,12 @@ import argparse
 import json
 import logging
 import logging.config
+from dotenv import load_dotenv
 
 # Set a default log level if LOG_LEVEL is not defined
+load_dotenv()
 log_level = os.getenv("LOG_LEVEL", "INFO")
+print(f"Log level set to: {log_level}")
 
 logging.config.dictConfig({
   "version": 1,

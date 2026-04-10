@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import time
 
 import cv2
+from PIL import Image
 from ultralytics.models.sam import SAM3SemanticPredictor
 import torch
 
@@ -16,6 +17,7 @@ import torch
 # Set up logging
 load_dotenv() # This looks for the .env file and loads the variables
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+print(f"Log level set to: {LOG_LEVEL}")
 logging.basicConfig(
     level=LOG_LEVEL,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -25,7 +27,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class SAM3Backend(LabelStudioMLBase):
-    _initalized = False
+    _initialized = False
     _model = None
     _store = None
     _labels = None
@@ -42,7 +44,7 @@ class SAM3Backend(LabelStudioMLBase):
             but we only want to initialize the heavy SAM 3 model and exemplar storage once per process, not once per instance.
             To achieve this, we use class variables to store the model and related data, and check if it's already initialized before doing the setup work. 
         """
-        if SAM3Backend._initalized:
+        if SAM3Backend._initialized:
             logger.info("--- SKIP: SAM 3 already initialized in this process ---")
             # Just ensure the instance variables are linked
             self.predictor = SAM3Backend._model
@@ -60,7 +62,8 @@ class SAM3Backend(LabelStudioMLBase):
             model=model_path,
             device='cuda',
             task='segment',
-            half=True 
+            half=True,
+            imgsz=1024
         )
 
         # Intilize all the stuff that needs to persist across instances in class variables, 
@@ -79,7 +82,7 @@ class SAM3Backend(LabelStudioMLBase):
         for label, prompt in zip(self.target_labels, self.target_prompts):
             logger.debug(f"Label: '{label}' will use initial prompt: '{prompt}'")
 
-        SAM3Backend._initalized = True
+        SAM3Backend._initialized = True
         logging.info("--- SAM 3 MODEL INITIALIZATION COMPLETE ---")
         
         
@@ -90,7 +93,7 @@ class SAM3Backend(LabelStudioMLBase):
         
         returns a list of predictions in the label-studio format
         """
-        if not SAM3Backend._initalized:
+        if not SAM3Backend._initialized:
             logging.info("Model not ready, returning empty predictions.")
             return ModelResponse(predictions=[])
 
@@ -105,9 +108,8 @@ class SAM3Backend(LabelStudioMLBase):
         self.predictor.set_image(image_path)
         
         # set image dimensions for the format_box
-        img = cv2.imread(image_path)
-        self.img_h, self.img_w = img.shape[:2]
-        self.cached_image_url = image_url
+        with Image.open(image_path) as im:
+            self.img_w, self.img_h = im.size
     
         logger.debug(f"Active prompts for this prediction: {self.target_prompts}")
         predictions = []
@@ -120,7 +122,7 @@ class SAM3Backend(LabelStudioMLBase):
             # If we have exemplars, use with model. Will be slower
             if exemplars:
                 # exemplar format: {"img": path, "bboxes": [[x1,y1,x2,y2]], "labels": [1]}
-                results = self.predictor(exemplar=exemplars, text=[self.target_prompts[i]])
+                results = self.predictor(exemplar=exemplars, text=["rectangle plate"])
             else:
                 # Fallback to text if no manual labels exist yet
                 results = self.predictor(text=[self.target_prompts[i]])
@@ -138,6 +140,8 @@ class SAM3Backend(LabelStudioMLBase):
     def fit(self, event, data, **kwargs):
         """ Stores the user's manual annotations as exemplars for future predictions """
         if event not in ['ANNOTATION_CREATED', 'ANNOTATION_UPDATED']:
+            logger.debug(f"Ignoring event: {event}")
+            logger.info("Model not ready, returning without updating exemplars.")
             return
 
         image_url = data['task']['data'].get('image') or data['task']['data'].get('image_url')
@@ -146,8 +150,8 @@ class SAM3Backend(LabelStudioMLBase):
         for result in data['annotation']['result']:
             if result['type'] == 'rectanglelabels':
                 v = result['value']
-                self.img_w = result.get('original_width')
-                self.img_h = result.get('original_height')
+                self.img_w = result.get('original_width') or 1920
+                self.img_h = result.get('original_height') or 1200
 
                 logger.debug(f"Processing user annotation: {v}")
                 if not v.get('rectanglelabels'): continue
@@ -164,7 +168,7 @@ class SAM3Backend(LabelStudioMLBase):
                 new_exemplar = {
                     "img": image_path,
                     "bboxes": [[x1, y1, x2, y2]],
-                    "labels": [label]
+                    "labels": [1]
                 }
 
                 logger.debug(f"New exemplar for label '{label}': {new_exemplar}")
