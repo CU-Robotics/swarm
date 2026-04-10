@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 class SAM3Backend(LabelStudioMLBase):
     _initialized = False
     _model = None
-    _store = None
     _labels = None
     _prompts = None
 
@@ -41,14 +40,13 @@ class SAM3Backend(LabelStudioMLBase):
             Initializes the SAM3 Backend
 
             LabelStudioMLBase will create a new instance of SAM3Backend for each worker process, 
-            but we only want to initialize the heavy SAM 3 model and exemplar storage once per process, not once per instance.
+            but we only want to initialize the heavy SAM 3 model once per process, not once per instance.
             To achieve this, we use class variables to store the model and related data, and check if it's already initialized before doing the setup work. 
         """
         if SAM3Backend._initialized:
             logger.info("--- SKIP: SAM 3 already initialized in this process ---")
             # Just ensure the instance variables are linked
             self.predictor = SAM3Backend._model
-            self.exemplar_store = SAM3Backend._store
             self.target_labels = SAM3Backend._labels
             self.target_prompts = SAM3Backend._prompts
             return
@@ -71,11 +69,9 @@ class SAM3Backend(LabelStudioMLBase):
         SAM3Backend._model.setup_model()
         SAM3Backend._labels = os.getenv("LABELS").split(",") 
         SAM3Backend._prompts = os.getenv("INITIAL_PROMPTS").split(",")
-        SAM3Backend._store = {label: [] for label in SAM3Backend._labels} # store exemplars for each label 
 
         # and point instance variables to them
         self.predictor = SAM3Backend._model
-        self.exemplar_store = SAM3Backend._store
         self.target_labels = SAM3Backend._labels
         self.target_prompts = SAM3Backend._prompts
                 
@@ -114,18 +110,9 @@ class SAM3Backend(LabelStudioMLBase):
         logger.debug(f"Active prompts for this prediction: {self.target_prompts}")
         predictions = []
 
-        # For each of the possible labels, run model using the correct prompt and exemplars
+        # For each of the possible labels, run model using the correct prompt
         for i, label_name in enumerate(self.target_labels):
-            exemplars = self.exemplar_store[label_name]
-            logger.debug(f"Exemplars for {label_name}: {exemplars}")
-            
-            # If we have exemplars, use with model. Will be slower
-            if exemplars:
-                # exemplar format: {"img": path, "bboxes": [[x1,y1,x2,y2]], "labels": [1]}
-                results = self.predictor(exemplar=exemplars, text=["rectangle plate"])
-            else:
-                # Fallback to text if no manual labels exist yet
-                results = self.predictor(text=[self.target_prompts[i]])
+            results = self.predictor(text=[self.target_prompts[i]])
             
             # If we have some bounding boxes, format them for label-studio and add to our predictions list
             if results and results[0].boxes is not None:
@@ -138,59 +125,7 @@ class SAM3Backend(LabelStudioMLBase):
         return ModelResponse(predictions=[{'result': predictions}])
 
     def fit(self, event, data, **kwargs):
-        """ Stores the user's manual annotations as exemplars for future predictions """
-        if event not in ['ANNOTATION_CREATED', 'ANNOTATION_UPDATED']:
-            logger.debug(f"Ignoring event: {event}")
-            logger.info("Model not ready, returning without updating exemplars.")
-            return
-
-        image_url = data['task']['data'].get('image') or data['task']['data'].get('image_url')
-        image_path = self.get_local_path(image_url)
-                
-        for result in data['annotation']['result']:
-            if result['type'] == 'rectanglelabels':
-                v = result['value']
-                self.img_w = result.get('original_width') or 1920
-                self.img_h = result.get('original_height') or 1200
-
-                logger.debug(f"Processing user annotation: {v}")
-                if not v.get('rectanglelabels'): continue
-                
-                label = v['rectanglelabels'][0]
-
-                # Convert percent coordinates to pixel coordinates (integer division)
-                x1 = int(v['x'] * self.img_w / 100)
-                y1 = int(v['y'] * self.img_h / 100)
-                x2 = int((v['x'] + v['width']) * self.img_w / 100)
-                y2 = int((v['y'] + v['height']) * self.img_h / 100)
-                
-                # Store the data required for an 'exemplar' prompt
-                new_exemplar = {
-                    "img": image_path,
-                    "bboxes": [[x1, y1, x2, y2]],
-                    "labels": [1]
-                }
-
-                logger.debug(f"New exemplar for label '{label}': {new_exemplar}")
-
-                # 3. Handle Debug Image Saving
-                if logger.isEnabledFor(logging.DEBUG):
-                    # Use a subdirectory for each label to stay organized
-                    debug_dir = os.path.join(os.path.dirname(__file__), "debug", label.replace(" ", "_"))
-                    os.makedirs(debug_dir, exist_ok=True)
-
-                    # Use a timestamp or unique ID to avoid filename collisions
-                    unique_id = int(time.time() * 1000)
-                    filename = f"crop_{unique_id}_{os.path.basename(image_path)}"
-                    save_path = os.path.join(debug_dir, filename)
-                    full_img = cv2.imread(image_path)
-                    crop = full_img[y1:y2, x1:x2]
-                    if crop.size > 0:
-                        cv2.imwrite(save_path, crop)
-                        logger.debug(f"Saved debug crop to: {save_path}")
-                
-                self.exemplar_store[label].insert(0, new_exemplar)
-                self.exemplar_store[label] = self.exemplar_store[label][:5] # Keep last 5
+        raise NotImplementedError("Training is not implemented yet")
 
     def _format_box(self, box, label, score=0.0):
         """ converts model's box output to label-studio format """
